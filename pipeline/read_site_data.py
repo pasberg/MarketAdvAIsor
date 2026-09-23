@@ -50,7 +50,10 @@ def main() -> int:
         if not box:
             print(f"{part}: saknas")
             continue
-        plain = restore(auth, json.loads(box), {user: password})
+        try:
+            plain = restore(auth, json.loads(box), {user: password})
+        except Exception:  # wrong password: the key does not decrypt
+            plain = None
         if plain is None:
             print("Fel användarnamn eller lösenord.")
             return 1
