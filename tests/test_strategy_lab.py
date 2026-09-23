@@ -91,6 +91,59 @@ class Lab(unittest.TestCase):
         for key, fam in lab.WEEKLY_FAMILIES.items():
             self.assertLessEqual(len(fam["grid"]), 4, key)
 
+    def test_portfolio_vol_target_scales_to_target_and_caps(self):
+        idx = pd.bdate_range("2020-01-01", periods=400)
+        rng = np.random.default_rng(4)
+        invested = pd.DataFrame({"X": 1.0}, index=idx)
+        wild = pd.Series(rng.normal(0.0005, 0.02, 400), index=idx)  # ~32 % yearly volatility
+        calm = pd.Series(rng.normal(0.0005, 0.003, 400), index=idx)  # ~5 % yearly volatility
+        _, s_wild = lab.portfolio_vol_target(wild, invested, cost_pct=0)
+        _, s_calm = lab.portfolio_vol_target(calm, invested, cost_pct=0)
+        self.assertAlmostEqual(s_wild.iloc[-1], 0.15 / 0.32, delta=0.12)
+        self.assertEqual(s_calm.iloc[-1], lab.VOL_MAX_LEVERAGE)
+        scaled, _ = lab.portfolio_vol_target(wild, invested, cost_pct=0)
+        self.assertLess(scaled.iloc[100:].std() * np.sqrt(lab.YEAR), 0.20)
+
+    def test_portfolio_vol_target_uses_no_future_data(self):
+        idx = pd.bdate_range("2020-01-01", periods=400)
+        rng = np.random.default_rng(5)
+        r = pd.Series(rng.normal(0.0005, 0.01, 400), index=idx)
+        later = r.copy()
+        later.iloc[301:] *= 5  # a wild future must not change today's scale
+        inv = pd.DataFrame({"X": 1.0}, index=idx)
+        a, _ = lab.portfolio_vol_target(r, inv)
+        b, _ = lab.portfolio_vol_target(later, inv)
+        pd.testing.assert_series_equal(a.iloc[:301], b.iloc[:301])
+
+    def test_leverage_is_charged(self):
+        idx = pd.bdate_range("2020-01-01", periods=300)
+        flat = pd.Series(0.0, index=idx)
+        flat.iloc[::2] = 0.0001  # tiny volatility -> maximum scale
+        out, scale = lab.portfolio_vol_target(flat, pd.DataFrame({"X": 1.0}, index=idx), cost_pct=0)
+        extra = (scale * 1.0 - 1).clip(lower=0).iloc[1:]
+        self.assertTrue((extra > 0).any())
+        self.assertLess(out.sum(), (flat * scale).sum())  # financing is paid on the part above 100 %
+
+    def test_combination_holds_an_equal_mix_of_the_best(self):
+        idx = pd.bdate_range("2020-01-01", periods=600)
+        rng = np.random.default_rng(6)
+        mk = lambda mu: pd.Series(rng.normal(mu, 0.01, len(idx)), index=idx)
+        per_family = {k: [({}, mk(mu), None)] for k, mu in (("a", .002), ("b", .0015), ("c", .001), ("d", -.001), ("e", -.002))}
+        r, picks = lab.walk_forward_combo(per_family, idx, start=300, step=100, ppy=lab.YEAR, k=3)
+        self.assertEqual({m["family"] for m in picks[-1]["members"]}, {"a", "b", "c"})
+        expected = pd.concat([per_family[k][0][1] for k in "abc"], axis=1).mean(axis=1).iloc[500:600]
+        pd.testing.assert_series_equal(r.iloc[-100:], expected, check_names=False)
+
+    def test_run_reports_combination(self):
+        rng = np.random.default_rng(7)
+        prices = {f"S{i}": frame(100 * np.cumprod(1 + rng.normal(0.0006, 0.012, 700))) for i in range(5)}
+        res = lab.run(prices, cost_pct=0.1)
+        combo = res["combination"]
+        self.assertEqual(len(combo["members_now"]), lab.COMBO_SIZE)
+        self.assertEqual(len(combo["train_members"]), lab.COMBO_SIZE)
+        self.assertIn("sharpe", combo["wf"])
+        self.assertTrue(all(0 <= s["weight"] <= lab.VOL_MAX_LEVERAGE for s in combo["signals"]))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -26,12 +26,6 @@ och lägg gärna till nya idéer längst ned.
 
 Ordningen är satt av ägaren (2026-09-23) efter genomgången av labbets första resultat.
 
-- [ ] **Kombination av strategier** — i stället för en enda mästare: en likaviktad portfölj av de 2–3
-      strategier som var robustast (bäst Sharpe i den tidiga perioden). Mästarvalet jagar i dag den strategi
-      som gått bäst senast och byter för sent; en kombination ska jämföras mot både mästaren och köp och behåll.
-- [ ] **Volatilitetsstyrd exponering** — överlägg på trendstrategierna (Trend med ATR-stop, Donchian, Faber):
-      skala positionen så att den årliga volatiliteten blir ca 15 % (maxhävstång 1,5). Kräver att positioner
-      får vara mellan 0 och 1,5.
 - [ ] **Lista utan efterhandsval** — testa på ett urval som inte är valt för att det gått bra, t.ex. alla
       nuvarande och tidigare bolag i OMXS30. Kräver ny datahämtning och ett eget universum i labbet.
 - [ ] **Marknadsregimfilter** — handla bara aktier när deras index (OMXS30 för Norden, SPX för USA)
@@ -51,3 +45,7 @@ Ordningen är satt av ägaren (2026-09-23) efter genomgången av labbets första
       Donchian och RSI(2), med årlig kostnad för korta positioner (`SHORT_COST_PCT_YEAR`).
 - [x] Veckodata — labbet körs även på veckoserien (10 års historik) med de långsiktiga strategierna
       (`WEEKLY_FAMILIES`, inställningar i veckor).
+- [x] Kombination av strategier — likaviktad portfölj av de 3 strategier som haft bäst Sharpe de senaste
+      två åren, omvald lika ofta som mästaren (`walk_forward_combo`), jämförs mot mästaren och köp och behåll.
+- [x] Volatilitetsstyrd exponering — Faber, Donchian, ATR-stop och tidsseriemomentum där hela portföljen
+      skalas mot 15 % årlig volatilitet (max 1,5 gånger, lånekostnad `LEVERAGE_COST_PCT_YEAR`).
