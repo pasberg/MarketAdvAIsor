@@ -11,6 +11,10 @@ python pipeline/fetch_market_data.py --out-dir data --parts "$parts"
 # log today's recommendations and follow up earlier ones (history survives a lost cache)
 (cd pipeline && python restore_log.py ../data/log.json) || echo "::warning::Kunde inte återställa loggen"
 node pipeline/log_picks.js --data data --page mockup/index.html || echo "::warning::Loggningen misslyckades"
+# strategy lab: re-run when daily prices were refreshed (or it never ran)
+if [[ "$parts" == *daily* ]] || [ ! -f data/lab.json ]; then
+  python pipeline/strategy_lab.py --data data || echo "::warning::Strategilabbet misslyckades"
+fi
 
 rm -rf site
 python pipeline/encrypt_data.py --src data --dst site/data

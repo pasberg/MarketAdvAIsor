@@ -296,6 +296,15 @@ table.wl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
 .bt-note{font-size:12px;color:var(--faint);margin-top:14px;max-width:90ch}
 .bt-empty{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:20px;color:var(--muted);margin-top:16px}
 @media (max-width:1100px){.bt-grid{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.lab-champ{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:20px;margin-top:4px}
+.sig-list{display:flex;flex-wrap:wrap;gap:6px;padding:0 16px 16px}
+.sig-list span{font:500 12px var(--mono);padding:3px 8px;border-radius:6px;border:1px solid var(--line)}
+.sig-list span.in{background:var(--up-soft);color:var(--up);border-color:transparent}
+.sig-list span.out{color:var(--faint)}
+.ok-flag{font-size:11px;font-weight:600;padding:2px 7px;border-radius:5px;background:var(--up-soft);color:var(--up);white-space:nowrap}
+.no-flag{font-size:11px;font-weight:600;padding:2px 7px;border-radius:5px;background:var(--surface-2);color:var(--muted);border:1px solid var(--line);white-space:nowrap}
+.lab-tbl td:nth-child(2){text-align:left;font-family:var(--body);color:var(--muted);max-width:30ch}
+@media (max-width:1100px){.lab-champ{grid-template-columns:1fr}}
 /* login gate */
 body.locked .top,body.locked main{filter:blur(7px) saturate(.7);pointer-events:none;user-select:none}
 .gate{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:16px;background:color-mix(in srgb,var(--bg) 45%,rgba(8,14,12,.55))}
@@ -311,7 +320,7 @@ body.locked .top,body.locked main{filter:blur(7px) saturate(.7);pointer-events:n
 .login button{font:600 14px var(--body);padding:11px;border:0;border-radius:9px;background:var(--accent);color:var(--accent-ink);cursor:pointer}
 .login button:disabled{opacity:.6;cursor:progress}
 .login .err{color:var(--down);font-size:13px;min-height:1.2em}
-.logout{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;color:var(--muted)}
+.logout{white-space:nowrap;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;color:var(--muted)}
 @media (max-width:1100px){
   .layout{grid-template-columns:1fr}
   .picks{position:static}
@@ -343,6 +352,7 @@ body.locked .top,body.locked main{filter:blur(7px) saturate(.7);pointer-events:n
       <a href="#top" aria-current="page" data-view="analys">Analyser</a>
       <a href="#bevakning">Bevakning</a>
       <a href="#backtest" data-view="backtest">Backtest</a>
+      <a href="#strategilabb" data-view="lab">Strategilabb</a>
       <a href="#metod" id="nav-metod">Metod</a>
     </nav>
     <div class="top-meta">
@@ -397,6 +407,8 @@ body.locked .top,body.locked main{filter:blur(7px) saturate(.7);pointer-events:n
     </div>
     <div id="bt-out"></div>
   </section>
+
+  <section class="lab" id="lab" hidden><div id="lab-out"></div></section>
 
   <section class="watch" id="bevakning">
     <h2 class="sec-t"><span>Att hålla koll på</span><span id="wl-count"></span></h2>
@@ -788,7 +800,7 @@ function instruments(m){
 
 // ---------- state
 const state={view:'analys',hz:'intradag',mkt:'all',sel:null,ov:{lv:true,fib:true,ew:true,ema:true,vwap:true,vol:true,rsi:true},cap:250000,riskPct:1,ins:null};
-try{const h=location.hash.slice(1);if(HZ[h])state.hz=h;if(h==='backtest')state.view='backtest'}catch(e){}
+try{const h=location.hash.slice(1);if(HZ[h])state.hz=h;if(h==='backtest')state.view='backtest';if(h==='strategilabb')state.view='lab'}catch(e){}
 try{const v=JSON.parse(localStorage.getItem('maa-ui2')||'null');if(v){Object.assign(state.ov,v.ov||{});if(v.cap)state.cap=v.cap;if(v.riskPct)state.riskPct=v.riskPct;if(!HZ[location.hash.slice(1)]&&HZ[v.hz])state.hz=v.hz}}catch(e){}
 const save=()=>{try{localStorage.setItem('maa-ui2',JSON.stringify({ov:state.ov,cap:state.cap,riskPct:state.riskPct,hz:state.hz}))}catch(e){}};
 const inMkt=s=>state.mkt==='all'||T[s][5].split(' ').includes(state.mkt);
@@ -819,12 +831,13 @@ function renderHz(){
   document.getElementById('hz').innerHTML=HZ_ORDER.map(k=>{const H=HZ[k];const tf={intra:'1–5 min',hour:'1 timme',day:'1 dag',week:'1 vecka'}[H.kind];
     return `<button role="tab" id="tab-${k}" aria-selected="${k===state.hz}" data-hz="${k}"><span class="t">${H.t}</span><span class="s">${H.valid} · ${tf}</span></button>`}).join('');
   const H=HZ[state.hz];
-  const bt=state.view==='backtest';
-  document.getElementById('h1').textContent=(bt?'Backtest · ':'Top picks · ')+H.t;
-  document.getElementById('hsub').textContent=bt?'Hade rekommendationerna fungerat? Reglerna för entry, stop loss och mål testade på historisk data.':H.sub;
-  document.querySelector('.layout').hidden=bt;document.getElementById('bevakning').hidden=bt;document.getElementById('metod').hidden=bt;
-  document.getElementById('bt').hidden=!bt;
-  document.querySelectorAll('.nav a').forEach(a=>{const v=a.dataset.view;if((v==='backtest')===bt&&v)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
+  const bt=state.view==='backtest',lab=state.view==='lab',other=bt||lab;
+  document.getElementById('h1').textContent=lab?'Strategilabb':(bt?'Backtest · ':'Top picks · ')+H.t;
+  document.getElementById('hsub').textContent=lab?'Etablerade strategier testade på samma instrument — med kostnader, kontrollperiod och omval som bara ser bakåt.':bt?'Hade rekommendationerna fungerat? Reglerna för entry, stop loss och mål testade på historisk data.':H.sub;
+  document.querySelector('.layout').hidden=other;document.getElementById('bevakning').hidden=other;document.getElementById('metod').hidden=other;
+  document.getElementById('bt').hidden=!bt;document.getElementById('lab').hidden=!lab;
+  document.getElementById('hz').hidden=lab;document.querySelector('.bar2').hidden=lab;
+  document.querySelectorAll('.nav a').forEach(a=>{const v=a.dataset.view;if(v&&v===state.view)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
   document.getElementById('regime').innerHTML=H.regime.map(([a,b])=>`<span>${a} <b>${b}</b></span>`).join('');
   const mk=[['all','Alla marknader'],['ndx','Nasdaq'],['spx','S&P 500'],['nord','Norden'],['index','Index'],['ravara','Råvaror']];
   document.getElementById('mk').innerHTML=mk.map(([k,l])=>`<button class="chip" aria-pressed="${state.mkt===k}" data-mkt="${k}">${l}</button>`).join('');
@@ -1158,10 +1171,64 @@ function renderLog(out,hz){
     <p class="bt-note">Varje förslag följs från tidpunkten det loggades: order vid entrynivån, ⅓ säljs vid varje mål, stop loss och tidsgräns som i simuleringen. Intradag följs på 5-minutersdata, vecka på timdata och längre horisonter på dagsdata. Kostnad ${f2(cost)} % av positionen tur och retur.</p>`;
 }
 
+// ---------- strategy lab (results computed by pipeline/strategy_lab.py)
+let labChart=null;
+function renderLab(){
+  const out=document.getElementById('lab-out');
+  if(labChart){labChart.remove();labChart=null}
+  const L=REAL&&REAL.lab;
+  if(!L){out.innerHTML='<div class="bt-empty">Strategilabbet har inte körts än, eller så är du inte inloggad. Det körs när dagsdatan uppdateras (17:50 och 22:35) och när sidan publiceras om.</div>';return}
+  const pct=v=>v==null?'–':sgn(v)+' %',sh=v=>v==null?'–':f2(v),C=L.champion,B=L.benchmark;
+  const fmtP=p=>Object.entries(p||{}).map(([k,v])=>`${k} ${v===true?'ja':v===false?'nej':v}`).join(', ')||'–';
+  const nameOf=id=>(L.families.find(f=>f.id===id)||{name:id}).name;
+  const cls=v=>(v||0)>=0?'pos':'neg';
+  const inPos=C.signals.filter(x=>x.pos>0);
+  out.innerHTML=`
+    <div class="kpis">
+      ${kp('Testade varianter',L.configs_tested,`${L.families.length} strategier × parametrar`)}
+      ${kp('Instrument',L.universe,`kostnad ${f2(L.cost_pct)} % per affär`)}
+      ${kp('Period',L.period.start.slice(0,4)+'–'+L.period.end.slice(0,4),`omval från ${L.period.wf_start}`)}
+      ${kp('Mästarens avkastning',pct(C.wf.cagr),'per år, omval som bara ser bakåt',cls(C.wf.cagr))}
+      ${kp('Köp och behåll',pct(B.wf.cagr),'per år, samma period',cls(B.wf.cagr))}
+      ${kp('Sharpe, mästare / köp',sh(C.wf.sharpe)+' / '+sh(B.wf.sharpe),'avkastning per risk',(C.wf.sharpe||0)>=(B.wf.sharpe||0)?'pos':'neg')}
+    </div>
+    <div class="lab-champ" style="margin-top:20px">
+      <div class="bt-card"><h3 class="sec-t"><span>Mästare just nu: ${esc(C.name)}</span><span>${esc(fmtP(C.params))}</span></h3>
+        <p class="bt-note" style="padding:0 16px;margin-top:4px">Var ${L.period.wf_start?'6:e månad':'period'} väljs den strategi och de inställningar som gått bäst de senaste två åren, och används sedan framåt. Kurvan visar det omvalet som om det gjorts i realtid — jämfört med att köpa och behålla samma instrument.</p>
+        <div class="eq" id="lab-eq"></div>
+        <h3 class="sec-t" style="padding:0 16px"><span>Mästarens signal i dag</span><span>${inPos.length} av ${C.signals.length} köpta</span></h3>
+        <div class="sig-list">${C.signals.map(x=>`<span class="${x.pos?'in':'out'}" title="sedan ${x.since}">${esc(x.sym)}</span>`).join('')}</div>
+      </div>
+      <div class="bt-card"><h3 class="sec-t"><span>Omval över tid</span><span>vilken strategi som valdes</span></h3>
+        <div class="bt-scroll"><table class="bt-tbl"><thead><tr><th>Från</th><th>Strategi</th><th>Inställningar</th></tr></thead><tbody>
+        ${C.picks.slice().reverse().map(p=>`<tr><td>${p.from}</td><td style="text-align:left;font-family:var(--body)">${esc(nameOf(p.family))}</td><td>${esc(fmtP(p.params))}</td></tr>`).join('')}
+        </tbody></table></div>
+        ${L.history&&L.history.length>1?`<h3 class="sec-t" style="padding:14px 16px 0"><span>Labbets historik</span><span>en rad per körningsdag</span></h3><div class="bt-scroll"><table class="bt-tbl"><thead><tr><th>Datum</th><th>Mästare</th><th>Sharpe</th><th>Köp &amp; behåll</th></tr></thead><tbody>${L.history.slice(-10).reverse().map(h=>`<tr><td>${h.date}</td><td style="text-align:left;font-family:var(--body)">${esc(nameOf(h.champion))}</td><td>${sh(h.wf_sharpe)}</td><td>${sh(h.bh_sharpe)}</td></tr>`).join('')}</tbody></table></div>`:''}
+      </div>
+    </div>
+    <div class="bt-card" style="margin-top:20px"><h3 class="sec-t"><span>Alla strategier</span><span>tränad ${L.period.start} – ${L.period.split} · kontroll ${L.period.split} – ${L.period.end}</span></h3>
+      <div class="bt-scroll"><table class="bt-tbl lab-tbl"><thead><tr><th>Strategi</th><th>Idé</th><th>Horisont</th><th>Bästa inställning (tränad)</th><th>Kontroll: avk./år</th><th>Kontroll: Sharpe</th><th>Kontroll: största fall</th><th>I marknaden</th><th>Omval: avk./år</th><th>Omval: Sharpe</th><th>Robust</th></tr></thead><tbody>
+      ${L.families.map(f=>{const t=f.best.test||{};return `<tr><td style="text-align:left;font-family:var(--body)"><b>${esc(f.name)}</b></td><td>${esc(f.desc)}</td><td style="font-family:var(--body)">${esc(f.term)}</td><td>${esc(fmtP(f.best.params))}</td><td class="${cls(t.cagr)}">${pct(t.cagr)}</td><td>${sh(t.sharpe)}</td><td class="neg">${pct(t.mdd)}</td><td>${t.exposure==null?'–':Math.round(t.exposure)+' %'}</td><td class="${cls(f.wf.cagr)}">${pct(f.wf.cagr)}</td><td>${sh(f.wf.sharpe)}</td><td>${f.id==='buy_hold'?'<span class="no-flag">Jämförelse</span>':f.robust.ok?'<span class="ok-flag">Robust</span>':`<span class="no-flag">${Math.round(f.robust.share_positive*100)} % positiva</span>`}</td></tr>`}).join('')}
+      </tbody></table></div></div>
+    <p class="bt-note">Så läser du tabellen: <b>Kontroll</b> är den sista 40 % av perioden, som inte användes när inställningen valdes. <b>Omval</b> är resultatet när strategins inställning väljs om regelbundet med bara historisk data — det närmaste ett ärligt framtidstest man kan göra i efterhand. <b>Robust</b> kräver att strategin slog köp och behåll i kontrollperioden (Sharpe) och att minst 60 % av dess inställningar var lönsamma där. Alla strategier äger eller står utanför (ingen blankning), handlar dagen efter signalen och betalar ${f2(L.cost_pct)} % per affär. Ju fler varianter som testas, desto större risk att någon ser bra ut av slump — därför väljs mästaren bara med omval, aldrig på hela perioden. Historisk avkastning är ingen garanti för framtiden.</p>`;
+  const el=document.getElementById('lab-eq'),LW=window.LightweightCharts;
+  if(el&&LW&&L.curves){
+    const Cv=n=>cssVar('--'+n);
+    labChart=LW.createChart(el,{autoSize:true,layout:{background:{type:'solid',color:Cv('surface')},textColor:Cv('muted'),fontFamily:'JetBrains Mono, monospace',fontSize:11,attributionLogo:true},
+      grid:{vertLines:{visible:false},horzLines:{color:Cv('line-2')}},rightPriceScale:{borderColor:Cv('line')},timeScale:{borderColor:Cv('line')},
+      localization:{locale:'sv-SE',priceFormatter:v=>sgn((v-1)*100)+' %'}});
+    const toSer=a=>a.map(p=>({time:p.t,value:p.v}));
+    labChart.addSeries(LW.LineSeries,{color:Cv('accent'),lineWidth:2,priceLineVisible:false,title:'Mästare'}).setData(toSer(L.curves.champion));
+    labChart.addSeries(LW.LineSeries,{color:Cv('faint'),lineWidth:2,lineStyle:2,priceLineVisible:false,title:'Köp & behåll'}).setData(toSer(L.curves.benchmark));
+    labChart.timeScale().fitContent();
+  }
+}
+
 let current=null;
 function render(){
   renderHz();
   if(state.view==='backtest'){renderBacktest();return}
+  if(state.view==='lab'){renderLab();return}
   const {tops,watch}=renderPicks();
   let m=null;
   if(state.sel){const list=state.sel.kind==='top'?tops:watch;m=list.find(x=>x.item.s===state.sel.s)||null}
@@ -1178,7 +1245,7 @@ document.addEventListener('click',e=>{
     if(kind==='watch'||window.innerWidth<1100)document.getElementById('detail').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})}
 });
 document.querySelectorAll('.nav a[data-view]').forEach(a=>a.addEventListener('click',e=>{
-  e.preventDefault();state.view=a.dataset.view;try{history.replaceState(null,'','#'+(state.view==='backtest'?'backtest':state.hz))}catch(_){}
+  e.preventDefault();state.view=a.dataset.view;try{history.replaceState(null,'','#'+({backtest:'backtest',lab:'strategilabb'}[state.view]||state.hz))}catch(_){}
   render();window.scrollTo({top:0,behavior:'auto'});
 }));
 document.getElementById('nav-metod').addEventListener('click',()=>{if(state.view!=='analys'){state.view='analys';render()}});
@@ -1288,7 +1355,7 @@ async function fetchParts(base,auth){
   let dekRaw=null;
   if(auth){dekRaw=await unwrapDek(auth,session);if(!dekRaw)return 'locked'}
   const manifest=await getJSON(base+'manifest.json');
-  const parts=await Promise.all(['intra','hour','daily','log'].map(async p=>{
+  const parts=await Promise.all(['intra','hour','daily','log','lab'].map(async p=>{
     const hit=partCache[p];if(manifest&&hit&&manifest[p]&&hit.gen===manifest[p])return hit.data;
     let d=null;
     if(auth){const bx=await getJSON(base+p+'.enc.json');if(bx){try{d=JSON.parse(new TextDecoder().decode(await openBox(dekRaw,bx)))}catch(e){}}}
@@ -1298,6 +1365,7 @@ async function fetchParts(base,auth){
   }));
   const merged=mergeParts(parts)||(auth?null:mergeParts([await getJSON(base+'market.json')]));
   const lg=parts[3];if(merged&&lg){merged.log=lg;merged.parts.log=lg.generated}
+  const lb=parts[4];if(merged&&lb){merged.lab=lb;merged.parts.lab=lb.generated}
   return merged;
 }
 async function loadData(){

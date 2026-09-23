@@ -1,0 +1,45 @@
+# Strategilabbets backlog
+
+Den här listan styr strategiagenten (en schemalagd Claude-session varje vecka). Agenten tar
+**en** punkt åt gången uppifrån, implementerar den i `pipeline/strategy_lab.py`, skriver tester
+och öppnar en pull request. Ägaren granskar och slår ihop. Stryk punkter med `[x]` när de är klara
+och lägg gärna till nya idéer längst ned.
+
+## Regler för agenten
+
+- Lägg till strategier som en ny post i `FAMILIES`. Per-instrument-strategier: `fn(df, **params)`
+  som returnerar position 0/1 per dag, bestämd vid stängning. Rotationsstrategier: `portfolio=True`
+  och `fn(prices, **params)` som returnerar en DataFrame med positioner.
+- **Ingen framåtblick.** En signal får bara använda data fram till och med dagens stängning.
+  Lägg till ett test som visar det när strategin använder rullande fönster eller `shift`.
+- **Små parameterrutnät: högst 4 varianter per strategi.** Varje extra variant ökar risken att
+  något ser bra ut av slump. Välj etablerade standardvärden från litteraturen, inte finjusterade tal.
+- Endast köp/stå utanför (ingen blankning) om inte punkten säger annat.
+- Ändra inte kostnadsmodellen, utvärderingen (`run`, `walk_forward`, `metrics`) eller de
+  live-regler som sajten visar (`mockup/analysis.js`) utan att punkten uttryckligen säger det.
+- Alla tester ska gå igenom: `python -m unittest discover -s tests -t .`
+- PR-beskrivningen ska säga vilken källa strategin kommer från och vilka parametrar som valts och varför.
+  Den kan inte innehålla resultat — labbet körs mot riktig data först när PR:en slagits ihop.
+
+## Att göra
+
+- [ ] **Dubbelt momentum (Antonacci)** — rotation mellan index och råvaror (OMXS30, SPX, NDX100, GOLD):
+      håll den med bäst 12-månadersavkastning om den är positiv, annars kontant. Variant: 6 och 12 månader.
+- [ ] **Volatilitetsstyrd exponering** — överlägg på "Pris över medelvärde": skala positionen så att
+      den årliga volatiliteten blir ca 15 % (maxhävstång 1). Kräver att positioner får vara mellan 0 och 1.
+- [ ] **Marknadsregimfilter** — handla bara aktier när deras index (OMXS30 för Norden, SPX för USA)
+      ligger över sitt 200-dagars medelvärde. Kombinera med Donchian och RSI(2).
+- [ ] **Keltner-utbrott** — köp stängning över EMA(20) + 2 × ATR(10), sälj under EMA(20).
+- [ ] **Supertrend** — ATR(10) × 3, standardinställning.
+- [ ] **IBS-rekyl (Internal Bar Strength)** — köp när (stängning − lägsta) / (högsta − lägsta) < 0,2 i upptrend,
+      sälj när IBS > 0,8.
+- [ ] **Månadsskiftet (turn of the month)** — äg index de sista 2 och första 3 handelsdagarna i månaden.
+- [ ] **Veckodata** — kör långa strategier (Faber 10 månader, 12-månaders momentum) på veckoserien
+      (10 års historik) i stället för dagsserien. Kräver att `load_prices` kan läsa `week`.
+- [ ] **Ichimoku** — pris över molnet och Tenkan över Kijun (9/26/52).
+- [ ] **Kombination av mästare** — likaviktad portfölj av de tre robustaste strategierna i stället för en.
+
+## Klart
+
+- [x] Köp och behåll, Faber, medelvärdeskorsning, Donchian, tidsseriemomentum, MACD, RSI(2),
+      Bollinger, 52-veckorshögsta, ATR-stop, relativ styrka (rotation).
