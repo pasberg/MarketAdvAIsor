@@ -153,7 +153,8 @@ def rsi2_ls(df, threshold):
 
 
 # ---------- rotation strategies: (dict of all prices) -> DataFrame of positions ----------
-STOCKS_ONLY = {"OMXS30", "SPX", "NDX100", "GOLD", "SILVER", "COPPER", "BRENT"}
+NON_STOCKS = {"OMXS30", "SPX", "NDX100", "GOLD", "SILVER", "COPPER", "BRENT"}
+DUAL_MOMENTUM_UNIVERSE = ("OMXS30", "SPX", "NDX100", "GOLD")
 
 
 def closes(prices: dict[str, pd.DataFrame]) -> pd.DataFrame:
@@ -162,7 +163,7 @@ def closes(prices: dict[str, pd.DataFrame]) -> pd.DataFrame:
 
 def xs_momentum(prices, lookback, top):
     """Each month hold the `top` stocks with the best return over `lookback` days, if that return is positive."""
-    c = closes({k: v for k, v in prices.items() if k not in STOCKS_ONLY})
+    c = closes({k: v for k, v in prices.items() if k not in NON_STOCKS})
     mom = c / c.shift(lookback) - 1
     month_end = c.index.to_series().groupby(c.index.to_period("M")).transform("max") == c.index.to_series()
     pos = pd.DataFrame(np.nan, index=c.index, columns=c.columns)
@@ -171,6 +172,29 @@ def xs_momentum(prices, lookback, top):
         winners = m[m > 0].nlargest(top).index
         pos.loc[d] = 0.0
         pos.loc[d, winners] = 1.0
+    return pos.ffill().fillna(0.0)
+
+
+def month_ends(index: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    s = index.to_series()
+    return index[(s.groupby(index.to_period("M")).transform("max") == s).to_numpy()]
+
+
+def dual_momentum(prices, lookback):
+    """Antonacci's dual momentum: each month hold the index/gold with the best return over
+    `lookback` days (relative momentum), but only if that return is positive (absolute
+    momentum); otherwise stay in cash."""
+    universe = {k: v for k, v in prices.items() if k in DUAL_MOMENTUM_UNIVERSE}
+    if not universe:  # none of the indices in the data: always in cash
+        return pd.DataFrame(index=closes(prices).index)
+    c = closes(universe)
+    mom = c / c.shift(lookback) - 1
+    pos = pd.DataFrame(np.nan, index=c.index, columns=c.columns)
+    for d in month_ends(c.index):
+        m = mom.loc[d].dropna()
+        pos.loc[d] = 0.0
+        if len(m) and m.max() > 0:
+            pos.loc[d, m.idxmax()] = 1.0
     return pos.ffill().fillna(0.0)
 
 
@@ -205,6 +229,9 @@ FAMILIES = {
                         term="Medel", short=True, fn=donchian_ls, grid=[{"n": n, "m": m} for n, m in ((20, 10), (55, 20))]),
     "rsi2_ls": dict(name="RSI(2), köp/blanka", desc="Köper översålt i upptrend, blankar överköpt i nedtrend (kort sikt)",
                     term="Kort", short=True, fn=rsi2_ls, grid=[{"threshold": t} for t in (5, 10)]),
+    "dual_momentum": dict(name="Dubbelt momentum", desc="Äger varje månad det av OMXS30, S&P 500, Nasdaq 100 och guld som gått bäst, om uppgången är positiv — annars kontant (Antonacci)",
+                          term="Medel–lång", fn=dual_momentum, portfolio=True,
+                          grid=[{"lookback": lb} for lb in (126, 252)]),
     "xs_momentum": dict(name="Relativ styrka (rotation)", desc="Äger varje månad de aktier som gått bäst senaste halvåret/året, om uppgången är positiv",
                         term="Medel–lång", fn=xs_momentum, portfolio=True,
                         grid=[{"lookback": lb, "top": k} for lb in (126, 252) for k in (5, 10)]),

@@ -24,8 +24,6 @@ och lägg gärna till nya idéer längst ned.
 
 ## Att göra
 
-- [ ] **Dubbelt momentum (Antonacci)** — rotation mellan index och råvaror (OMXS30, SPX, NDX100, GOLD):
-      håll den med bäst 12-månadersavkastning om den är positiv, annars kontant. Variant: 6 och 12 månader.
 - [ ] **Volatilitetsstyrd exponering** — överlägg på "Pris över medelvärde": skala positionen så att
       den årliga volatiliteten blir ca 15 % (maxhävstång 1). Kräver att positioner får vara mellan 0 och 1.
 - [ ] **Marknadsregimfilter** — handla bara aktier när deras index (OMXS30 för Norden, SPX för USA)
@@ -46,3 +44,4 @@ och lägg gärna till nya idéer längst ned.
       Bollinger, 52-veckorshögsta, ATR-stop, relativ styrka (rotation).
 - [x] Köp/blanka-versioner: pris mot medelvärde, medelvärdeskorsning, tidsseriemomentum,
       Donchian och RSI(2), med årlig kostnad för korta positioner (`SHORT_COST_PCT_YEAR`).
+- [x] Dubbelt momentum (Antonacci) — rotation mellan OMXS30, S&P 500, Nasdaq 100 och guld, 6 och 12 månader.
