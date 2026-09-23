@@ -49,9 +49,10 @@ SYMBOLS = {
     "NOKIA": ("NOKIA.HE", "EUR", False),
 }
 
+# value: Yahoo symbol, or candidates tried in order (the first with data wins)
 INDICES = {
     "S&P 500": "^GSPC", "Nasdaq 100": "^NDX", "OMXS30": "^OMX", "OMXC25": "^OMXC25",
-    "OBX": "OBX.OL", "OMXH25": "^OMXH25", "VIX": "^VIX",
+    "OBX": ["OBX.OL", "^OBX", "OSEBX.OL", "^OSEBX"], "OMXH25": "^OMXH25", "VIX": "^VIX",
 }
 
 # series key -> yfinance (interval, period, max bars kept)
@@ -152,11 +153,14 @@ def build(yf) -> dict:
             info["last"] = intra["c"][-1]
             info["asOf"] = intra["t"][-1]
 
-    idx_frames = _download(yf, list(INDICES.values()), "1d", "3mo")
-    for name, ysym in INDICES.items():
-        s = frame_to_series(idx_frames.get(ysym), "1d", 40)
-        if s and len(s["c"]) >= 2:
-            result["indices"][name] = {"last": s["c"][-1], "prevClose": s["c"][-2], "spark": s["c"]}
+    cands = {name: ([y] if isinstance(y, str) else y) for name, y in INDICES.items()}
+    idx_frames = _download(yf, [y for ys in cands.values() for y in ys], "1d", "3mo")
+    for name, ysyms in cands.items():
+        for ysym in ysyms:
+            s = frame_to_series(idx_frames.get(ysym), "1d", 40)
+            if s and len(s["c"]) >= 2:
+                result["indices"][name] = {"last": s["c"][-1], "prevClose": s["c"][-2], "spark": s["c"], "yahoo": ysym}
+                break
         else:
             result["errors"][f"index/{name}"] = "ingen data"
     return result

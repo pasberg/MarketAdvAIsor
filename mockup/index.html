@@ -55,6 +55,8 @@ button,select{font:inherit;color:inherit}
 .nav a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:8px;font-weight:500}
 .nav a[aria-current]{color:var(--ink);background:var(--surface)}
 .top-meta{margin-left:auto;display:flex;align-items:center;gap:12px;color:var(--muted);font-size:12px}
+.src-ok{color:var(--up);font-weight:600}
+.badge-demo.ok{background:var(--up-soft);color:var(--up)}
 .badge-demo{font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;padding:3px 8px;border-radius:999px;background:var(--warn-soft);color:var(--warn)}
 .live{display:inline-flex;align-items:center;gap:6px}
 .live i{width:7px;height:7px;border-radius:50%;background:var(--up);box-shadow:0 0 0 3px var(--up-soft)}
@@ -288,8 +290,8 @@ table.wl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
       <a href="#metod">Metod</a>
     </nav>
     <div class="top-meta">
-      <span class="live"><i></i>Uppdaterad ons 23 sep 2026 · 15:50 CET</span>
-      <span class="badge-demo">Mockup · exempeldata</span>
+      <span class="live" id="upd"><i></i>Exempeldata · ons 23 sep 2026 15:50</span>
+      <span class="badge-demo" id="badge">Mockup · exempeldata</span>
     </div>
   </div>
 </header>
@@ -514,7 +516,12 @@ const hm=min=>String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padS
 const mwUrl=s=>{const t=T[s];return 'https://www.marketwatch.com/investing/stock/'+t[6]+(t[7]?'?countrycode='+t[7]:'')};
 const tvUrl=s=>'https://www.tradingview.com/symbols/'+EX[T[s][1]].tv+'-'+s.replace('-','_')+'/';
 const exitMin=s=>EX[T[s][1]].c-5;
-const leftTxt=min=>{const d=min-NOW_MIN;return d<60?`${d} min kvar`:`${Math.floor(d/60)} h ${d%60} min kvar`};
+const nowMin=()=>{if(!REAL)return NOW_MIN;try{const [h,mi]=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Stockholm',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date()).split(':').map(Number);return h*60+mi}catch(e){return NOW_MIN}};
+// "senaste handelsdag" note when intraday bars are not from today (e.g. US before the open)
+const staleTxt=m=>{if(HZ[m.hz].kind!=='intra')return '';const d=new Date(m.c[m.N-1].time*1000);
+  let today;try{today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Stockholm',day:'numeric',month:'numeric'}).format(new Date())}catch(e){return ''}
+  const bar=d.getUTCDate()+'/'+(d.getUTCMonth()+1);return today===bar?'':` · <b>visar senaste handelsdag ${d.getUTCDate()} ${['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'][d.getUTCMonth()]}</b>`};
+const leftTxt=min=>{const d=min-nowMin();return d<=0?'stängd för idag':d<60?`${d} min kvar`:`${Math.floor(d/60)} h ${d%60} min kvar`};
 const tfLabel=(hz,s)=>{const k=HZ[hz].kind;return k==='intra'?(EX[T[s][1]].us?'1 min':'5 min'):k==='hour'?'1 timme':k==='day'?'1 dag':'1 vecka'};
 const cssVar=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
@@ -542,6 +549,9 @@ function ema(vals,p){const k=2/(p+1),o=[];vals.forEach((v,i)=>o.push(i?o[i-1]+k*
 function model(item,hz){
   const key=hz+'|'+item.s+'|'+item.kind;
   if(cache[key])return cache[key];
+  return cache[key]=realModel(item,hz)||synthModel(item,hz,key);
+}
+function synthModel(item,hz,key){
   const H=HZ[hz],t=T[item.s],s=item.dir==='L'?1:-1,P=t[3],R=P*H.vol,N=H.n;
   const eU=1-item.ret,w1=eU*.6,w2=w1*.35,slU=eU-.24;
   const curU=eU+(item.status?OFF[item.status]:.015);
@@ -583,9 +593,61 @@ function model(item,hz){
   const W=H.w,score=Math.round(item.sc.reduce((a,v,i)=>a+v*W[i],0));
   const prob=Math.max(30,Math.min(78,Math.round(35+(score-50)*.9)));
   const ev=(prob/100)*rr[1]-(1-prob/100);
-  const m={item,t,s,P,R,val,piv,pIdx,c,tl,e20,e50,vwap,rsi,lv,rr,score,prob,ev,risk,eU,hz,N,
-    rsiNow:Math.round(rsi[N-1]),e20Now:e20[N-1],e50Now:e50[N-1],vwapNow:vwap[N-1]};
-  cache[key]=m;return m;
+  const marks=piv.map((p,i)=>{if(!p.l)return null;const pk=i===piv.length-1?false:p.u>=piv[i-1].u;return {i:pIdx[i],above:(s>0)===pk,text:p.l}}).filter(Boolean);
+  const m={item,t,s,P,R,val,c,tl,e20,e50,vwap,rsi,lv,rr,score,prob,ev,risk,eU,hz,N,sc:item.sc,marks,projLabel:'5',real:false,
+    rsiNow:Math.round(rsi[N-1]),e20Now:e20[N-1],e50Now:e50[N-1],vwapNow:vwap[N-1],macdUp:null,status:item.status};
+  return m;
+}
+// ---------- real price data
+let REAL=null;
+const SER_KEY={intra:'intra',hour:'hour',day:'day',week:'week'};
+const SER_N={intradag:420,vecka:90,manad:90,kvartal:160,halvar:80,ar:130};
+function indicators(c,N){
+  const closes=c.map(x=>x.close);
+  const e20=ema(closes,20),e50=ema(closes,50),e12=ema(closes,12),e26=ema(closes,26);
+  const macd=e12.map((v,i)=>v-e26[i]),sig=ema(macd,9);
+  let pv=0,vv=0;const vwap=c.map(x=>{const tp=(x.high+x.low+x.close)/3,v=x.vol||1;pv+=tp*v;vv+=v;return pv/vv});
+  const rsi=[];let ag=0,al=0;
+  for(let i=1;i<N;i++){const d=closes[i]-closes[i-1],g=Math.max(d,0),l=Math.max(-d,0);
+    if(i<=14){ag+=g/14;al+=l/14;rsi[i]=i===14?100-100/(1+ag/(al||1e-9)):null}
+    else{ag=(ag*13+g)/14;al=(al*13+l)/14;rsi[i]=100-100/(1+ag/(al||1e-9))}}
+  return {e20,e50,vwap,rsi,macd,sig};
+}
+function realModel(item,hz){
+  const H=HZ[hz],sym=REAL&&REAL.symbols[item.s],ser=sym&&sym.series[SER_KEY[H.kind]];
+  if(!ser||ser.c.length<30)return null;
+  const n=Math.min(SER_N[hz],ser.c.length),off=ser.c.length-n;
+  const c=[];for(let i=off;i<ser.c.length;i++)c.push({time:ser.t[i],open:ser.o[i],high:ser.h[i],low:ser.l[i],close:ser.c[i],vol:ser.v[i]});
+  const N=c.length,t=T[item.s],s=item.dir==='L'?1:-1,P=c[N-1].close;
+  // impulse in the pick's direction: extreme of the window and the opposite extreme before it
+  const hiI=a=>a.reduce((b,x,i)=>x.high>a[b].high?i:b,0),loI=a=>a.reduce((b,x,i)=>x.low<a[b].low?i:b,0);
+  let endI=s>0?hiI(c):loI(c);if(endI<5)endI=s>0?hiI(c.slice(0,N-3)):loI(c.slice(0,N-3));
+  const head=c.slice(0,endI+1),startI=s>0?loI(head):hiI(head);
+  const A=s>0?c[startI].low:c[startI].high,B=s>0?c[endI].high:c[endI].low,R=Math.abs(B-A)||P*.01;
+  const val=u=>A+s*u*R,curU=(P-A)/(s*R);
+  const opts=[.382,.5,.618].map(r=>({r,eU:1-r})).filter(o=>o.eU<=curU+.05);
+  const pick=opts.length?opts.reduce((a,b)=>Math.abs(b.eU-curU)<Math.abs(a.eU-curU)?b:a):{r:.618,eU:.382};
+  const eU=pick.eU,slU=eU-.24;
+  const ind=indicators(c,N);
+  const lv={entry:val(eU),zLo:Math.min(val(eU-.03),val(eU+.03)),zHi:Math.max(val(eU-.03),val(eU+.03)),sl:val(slU),tp1:val(1),tp2:val(1.272),tp3:val(1.618),w1:val(0)};
+  const risk=Math.abs(lv.entry-lv.sl),rr=[lv.tp1,lv.tp2,lv.tp3].map(v=>Math.abs(v-lv.entry)/risk);
+  // scores computed from the data: TA, momentum, Fibonacci; the rest stays from the case
+  const e20=ind.e20[N-1],e50=ind.e50[N-1],slope=ind.e50[N-1]-ind.e50[Math.max(0,N-6)],rsiNow=Math.round(ind.rsi[N-1]??50);
+  const macdUp=ind.macd[N-1]>ind.sig[N-1];
+  const ta=50+(s*(P-e20)>0?12:0)+(s*(P-e50)>0?12:0)+(s*(e20-e50)>0?14:0)+(s*slope>0?8:0);
+  const rsiOk=s>0?(rsiNow>=38&&rsiNow<=68):(rsiNow>=32&&rsiNow<=62),rsiRise=s*((ind.rsi[N-1]??50)-(ind.rsi[N-4]??50))>0;
+  const mom=48+((macdUp===(s>0))?18:0)+(rsiOk?16:0)+(rsiRise?10:0);
+  const fib=Math.round(Math.max(40,Math.min(92,90-Math.abs(curU-eU)*220)));
+  const sc=[ta,item.sc[1],item.sc[2],mom,fib,item.sc[5]];
+  const score=Math.round(sc.reduce((a,v,i)=>a+v*H.w[i],0));
+  const prob=Math.max(30,Math.min(78,Math.round(35+(score-50)*.9))),ev=(prob/100)*rr[1]-(1-prob/100);
+  const gap=s>0?curU-eU:curU-eU,status=item.kind!=='watch'?null:Math.abs(gap)<.06?'near':gap>.15?'wait':'build';
+  // future timestamps for the projection
+  const step=Math.max(60,Math.round((c[N-1].time-c[Math.max(0,N-6)].time)/Math.min(5,N-1)));
+  const fwd=H.fwd,times=c.map(x=>x.time);for(let i=1;i<=fwd;i++)times.push(c[N-1].time+i*step);
+  const marks=[{i:startI,above:s<0,text:s>0?'Låg':'Topp'},{i:endI,above:s>0,text:s>0?'Topp':'Låg'}];
+  return {item:Object.assign({},item,{ret:pick.r}),t,s,P,R,val,c,tl:{t:times,fwd},...ind,lv,rr,score,prob,ev,risk,eU,hz,N,sc,marks,projLabel:'Mål',real:true,
+    curU,rsiNow,e20Now:e20,e50Now:e50,vwapNow:ind.vwap[N-1],macdUp,status:status||item.status,A,B};
 }
 function pool(hz){
   const d=D[hz];
@@ -593,19 +655,21 @@ function pool(hz){
   return {top:d.top.map(a=>mk(a,'top')),watch:d.watch.map(a=>mk(a,'watch'))};
 }
 function signals(m){
-  const {item,s,lv,t,hz,P}=m,L=s>0,sc=item.sc,cur=t[2],intra=hz==='intradag';
+  const {item,s,lv,t,hz,P}=m,L=s>0,sc=m.sc,cur=t[2],intra=hz==='intradag';
   const rel=(v)=>P>v?'över':'under';
   const taTxt=`Pris ${rel(m.e20Now)} EMA 20 och ${rel(m.e50Now)} EMA 50${intra?`, ${rel(m.vwapNow)} VWAP`:''}. `+
-    (sc[0]>=75?(L?'Högre toppar och bottnar — rekylen sker inom upptrend.':'Lägre toppar och bottnar — rekylen sker inom nedtrend.'):sc[0]>=62?'Strukturen är intakt men medelvärdena planar ut.':'Blandad bild — trenden är inte bekräftad.');
+    (m.real?`EMA 20 ligger ${m.e20Now>m.e50Now?'över':'under'} EMA 50 — ${(m.e20Now>m.e50Now)===L?'trenden går i affärens riktning.':'trenden går emot affären.'}`
+    :(sc[0]>=75?(L?'Högre toppar och bottnar — rekylen sker inom upptrend.':'Lägre toppar och bottnar — rekylen sker inom nedtrend.'):sc[0]>=62?'Strukturen är intakt men medelvärdena planar ut.':'Blandad bild — trenden är inte bekräftad.'));
   const faTxt=intra?'Låg vikt intradag. Inga rapporter eller bolagshändelser under dagen.'
       :sc[1]>=80?(L?'Vinstrevideringar uppåt och P/E under femårssnittet.':'Stark balans, men marginalerna pressas.')
       :sc[1]>=65?(L?'Stabil vinsttillväxt; värderingen i linje med sektorn.':'Neutrala revideringar; värderingen ger inget stöd.')
       :(L?'Svag vinsttrend — caset vilar på tekniken.':'Negativa revideringar och fallande marginaler.');
-  const macd=sc[3]>=70?(L?'korsar upp':'korsar ned'):'planar ut';
+  const macd=m.real?(m.macdUp?'över signallinjen':'under signallinjen'):sc[3]>=70?(L?'korsar upp':'korsar ned'):'planar ut';
   return [
     {txt:taTxt,ind:[`EMA20 ${f2(m.e20Now)}`,`EMA50 ${f2(m.e50Now)}`].concat(intra?[`VWAP ${f2(m.vwapNow)}`]:[]).concat([`Volym ${sc[0]>=75?'↑':'→'}`])},
     {txt:faTxt,ind:intra?['—']:['Revideringar','P/E vs historik','Marginal']},
-    {txt:`Våg 4 pågår. Mål för våg 5: ${f2(lv.tp2)}–${f2(lv.tp3)} ${cur}. Ogiltig ${L?'under':'över'} våg 1 (${f2(lv.w1)}).`,ind:['Våg 4 av 5',`Inval. ${f2(lv.w1)}`]},
+    m.real?{txt:`Impuls ${f2(m.A)} → ${f2(m.B)}; priset har rekylerat ${Math.round((1-m.curU)*100)} %. Mål vid förlängning: ${f2(lv.tp2)}–${f2(lv.tp3)} ${cur}. Vågräkningen är inte automatiserad än — poängen kommer från caset.`,ind:[`Rekyl ${Math.round((1-m.curU)*100)} %`,`Start ${f2(m.A)}`]}
+    :{txt:`Våg 4 pågår. Mål för våg 5: ${f2(lv.tp2)}–${f2(lv.tp3)} ${cur}. Ogiltig ${L?'under':'över'} våg 1 (${f2(lv.w1)}).`,ind:['Våg 4 av 5',`Inval. ${f2(lv.w1)}`]},
     {txt:`RSI ${m.rsiNow<35?'nära översålt':m.rsiNow>65?'nära överköpt':'i neutral zon'} efter rekylen; MACD ${macd}. Momentum ${sc[3]>=75?'stöder':'stöder delvis'} riktningen.`,ind:[`RSI14 ${m.rsiNow}`,`MACD ${macd}`,`RS mot index ${sc[3]>=75?'↑':'→'}`]},
     {txt:`Entry vid ${pctTxt(item.ret)}-retracement. TP2/TP3 vid 127,2 / 161,8 %-extension.`,ind:[`${pctTxt(item.ret)} ${f2(lv.entry)}`,`127,2 % ${f2(lv.tp2)}`]},
     {txt:sc[5]>=74?(L?'Positivt optionsflöde; blankningen minskar.':'Put-flödet ökar; insiders är nettosäljare.'):sc[5]>=62?'Neutralt sentiment; inga extrema positioneringar.':'Svagt intresse — låg volym i optioner.',ind:[`P/C ${L?(sc[5]>=74?'0,62':'0,85'):'1,24'}`]}
@@ -668,7 +732,10 @@ function spark(vals,cls,w=74,h=24,dot=true){
 }
 function renderStrip(){
   document.getElementById('strip').innerHTML=IDX.map(([n,v,ch])=>{
-    const r=rng(hash(n)),a=[];let x=0;for(let i=0;i<40;i++){x+=(r()-.5)+ch*.05;a.push(x)}
+    const ri=REAL&&REAL.indices[n];let a=[];
+    if(REAL&&!ri)return `<div class="idx"><span class="n">${n}</span><span class="v num">—</span><span class="c num" style="color:var(--faint)">saknas</span></div>`;
+    if(ri){v=ri.last;ch=(ri.last/ri.prevClose-1)*100;a=ri.spark}
+    else{const r=rng(hash(n));let x=0;for(let i=0;i<40;i++){x+=(r()-.5)+ch*.05;a.push(x)}}
     const cls=n==='VIX'?(ch>0?'down':'up'):(ch>=0?'up':'down');
     return `<div class="idx"><span class="n">${n}</span><span class="v num">${v>1000?f1(v):f2(v)}</span><span class="c num ${cls==='up'?'pos':'neg'}">${sgn(ch,f2)} %</span>${spark(a,cls,120,22,false)}</div>`}).join('');
 }
@@ -712,7 +779,7 @@ function renderPicks(){
       <td>${esc(m.item.setup)}</td>
       <td class="r num">${f2(m.P)}</td><td class="r num">${f2(m.lv.entry)}</td>
       <td class="r num">${sgn(dist)} %</td><td class="r num">${m.score}</td>
-      <td><span class="st ${m.item.status}">${STATUS[m.item.status]}</span></td>
+      <td><span class="st ${m.status}">${STATUS[m.status]}</span></td>
       <td class="nt">${esc(m.item.text)}</td></tr>`}).join(''):`<tr><td colspan="9" style="color:var(--muted)">Inga bevakningar i vald marknad.</td></tr>`;
   return {tops:shown,watch:w};
 }
@@ -763,11 +830,10 @@ function drawChart(m){
   }
   if(ov.ew){
     const ink=C('ink'),last=m.N-1,tt=m.tl.t,f=m.tl.fwd,mid=last+Math.max(1,Math.round(f*.35));
-    const mk=m.piv.map((p,i)=>{if(!p.l)return null;const pk=i===m.piv.length-1?false:p.u>=m.piv[i-1].u;const above=(m.s>0)===pk;
-      return {time:m.c[m.pIdx[i]].time,position:above?'aboveBar':'belowBar',shape:'circle',color:ink,text:p.l,size:.6}}).filter(Boolean);
+    const mk=m.marks.map(k=>({time:m.c[k.i].time,position:k.above?'aboveBar':'belowBar',shape:'circle',color:ink,text:k.text,size:.6}));
     LW.createSeriesMarkers(cs,mk);
     const proj=line([{time:tt[last],value:m.P},{time:tt[mid],value:m.val(m.eU-.02)},{time:tt[last+f],value:lv.tp2}],ink,1.5,2);
-    LW.createSeriesMarkers(proj,[{time:tt[last+f],position:m.s>0?'aboveBar':'belowBar',shape:'circle',color:ink,text:'5',size:.6}]);
+    LW.createSeriesMarkers(proj,[{time:tt[last+f],position:m.s>0?'aboveBar':'belowBar',shape:'circle',color:ink,text:m.projLabel,size:.6}]);
   }
   if(ov.rsi){
     const rs=chart.addSeries(LW.LineSeries,{color:C('accent'),lineWidth:1.5,priceLineVisible:false,lastValueVisible:true,priceFormat:{type:'price',precision:0,minMove:1},
@@ -802,12 +868,12 @@ function renderDetail(m){
   const ex=exitMin(item.s);
   const usable=ins.filter(x=>x.tag!=='no');
   if(!state.ins||!usable.find(x=>x.id===state.ins))state.ins=usable[0].id;
-  const toggles=[['lv','Handelsnivåer'],['fib','Fibonacci'],['ew','Elliott Wave'],['ema','EMA 20/50'],intra?['vwap','VWAP']:null,['vol','Volym'],['rsi','RSI']].filter(Boolean);
+  const toggles=[['lv','Handelsnivåer'],['fib','Fibonacci'],['ew',m.real?'Swing & mål':'Elliott Wave'],['ema','EMA 20/50'],intra?['vwap','VWAP']:null,['vol','Volym'],['rsi','RSI']].filter(Boolean);
   const sw={ema:'linear-gradient(90deg,var(--ema20) 50%,var(--ema50) 50%)',vwap:'var(--vwap)',fib:'var(--fib)',lv:'var(--accent)',rsi:'var(--accent)'};
   el.innerHTML=`
   <div class="d-head">
     <div class="d-id">
-      <div class="row"><span class="d-sym">${esc(item.s)}</span><span class="dir ${item.dir}">${item.dir==='L'?'LÅNG':'KORT'}</span>${isW?`<span class="watchflag">Bevakning · ${STATUS[item.status]}</span>`:''}</div>
+      <div class="row"><span class="d-sym">${esc(item.s)}</span><span class="dir ${item.dir}">${item.dir==='L'?'LÅNG':'KORT'}</span>${isW?`<span class="watchflag">Bevakning · ${STATUS[m.status]}</span>`:''}</div>
       <div class="row"><span class="d-name">${esc(t[0])} · ${t[1]}</span><span class="d-price"><span class="p num">${f2(m.P)}</span><span>${cur}</span><span class="num ${t[4]>=0?'pos':'neg'}">${sgn(t[4],f2)} %</span></span></div>
       <div class="setup">Setup: <b>${esc(item.setup)}</b> · ${H.t} (${H.valid})</div>
     </div>
@@ -822,10 +888,10 @@ function renderDetail(m){
   <div class="chart-box">
     <div class="chart-tools">
       <div class="toggles">${toggles.map(([k,l])=>`<label class="tg"><input type="checkbox" id="ov-${k}" data-ov="${k}" ${state.ov[k]?'checked':''}>${sw[k]?`<i style="background:${sw[k]}"></i>`:''}${l}</label>`).join('')}</div>
-      <span class="tf">${tfLabel(m.hz,item.s)} · exempeldata</span>
+      <span class="tf">${tfLabel(m.hz,item.s)} · ${m.real?`<span class="src-ok">riktig kursdata</span>${EX[t[1]].us?'':' · ~15 min fördröjd'}${staleTxt(m)}`:'exempeldata'}</span>
     </div>
     <div class="chart-wrap"><div class="legend" id="legend"></div><div id="chart"></div></div>
-    <div class="chart-foot"><span>Streckade linjer: blå = entryzon, röd = SL, grön = TP · svart streckad = projicerad våg 5</span>
+    <div class="chart-foot"><span>${m.real?'Nivåerna räknas fram ur senaste impulsen i grafen: entry vid närmaste Fibonacci-rekyl, TP vid toppen och 127,2 / 161,8 %-förlängning.':'Streckade linjer: blå = entryzon, röd = SL, grön = TP · svart streckad = projicerad våg 5'}</span>
       <span class="links"><a class="mw" href="${avzStock(item.s)}" target="_blank" rel="noopener">Avanza ↗</a><a class="mw" href="${tvUrl(item.s)}" target="_blank" rel="noopener">TradingView ↗</a><a class="mw" href="${mwUrl(item.s)}" target="_blank" rel="noopener">MarketWatch ↗</a></span></div>
   </div>
   <div class="trade-band">
@@ -853,14 +919,14 @@ function renderDetail(m){
     <section>
       <h3 class="sec-t"><span>Signaler</span><span>Viktning ${H.t.toLowerCase()}</span></h3>
       <div class="sig">
-        ${SIG.map((n,i)=>{const v=item.sc[i],col=v>=75?'up':v>=62?'accent':'warn';return `<div><div class="sg-h"><div><div class="sg-n">${n}<em>vikt ${Math.round(H.w[i]*100)} %</em></div><div class="sg-bar"><i style="width:${v}%;background:var(--${col})"></i></div></div><span class="sg-v">${v}</span></div><div class="sg-c">${esc(sg[i].txt)}</div><div class="sg-i">${sg[i].ind.map(x=>`<span>${esc(x)}</span>`).join('')}</div></div>`}).join('')}
+        ${SIG.map((n,i)=>{const v=m.sc[i],col=v>=75?'up':v>=62?'accent':'warn';return `<div><div class="sg-h"><div><div class="sg-n">${n}<em>vikt ${Math.round(H.w[i]*100)} %</em></div><div class="sg-bar"><i style="width:${v}%;background:var(--${col})"></i></div></div><span class="sg-v">${v}</span></div><div class="sg-c">${esc(sg[i].txt)}</div><div class="sg-i">${sg[i].ind.map(x=>`<span>${esc(x)}</span>`).join('')}</div></div>`}).join('')}
       </div>
     </section>
   </div>
   <div class="d-foot">
     <section>
       <h3 class="sec-t"><span>Argumentation</span></h3>
-      <p class="thesis">${esc(item.text)}</p>
+      <p class="thesis">${esc(item.text)}</p>${m.real?'<p class="note">Exempeltext — motiveringen genereras inte ur kursdatan än. Nivåer, TA, momentum och Fibonacci är beräknade.</p>':''}
       <div class="conf">${confl.map(c=>`<span>${esc(c)}</span>`).join('')}</div>
       ${item.risk?`<div class="risk"><b>Risk</b><span>${esc(item.risk)}</span></div>`:''}
       <p class="inval">Caset ogiltigförklaras vid ${intra?'handel':'stängning'} ${s>0?'under':'över'} <b class="num">${f2(lv.sl)}</b> ${cur}${intra?` — eller vid tidsstoppet ${hm(ex)}`:''}.</p>
@@ -928,5 +994,20 @@ try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>dra
 new MutationObserver(()=>drawChart(current)).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
 
 renderStrip();renderMethod();render();
+// Load real price data published next to the page (data/market.json); keep example data if absent.
+(async()=>{
+  for(const url of ['data/market.json','../data/market.json']){
+    try{const r=await fetch(url,{cache:'no-store'});if(!r.ok)continue;const d=await r.json();if(!d||!d.symbols)continue;
+      REAL=d;
+      for(const [sym,x] of Object.entries(d.symbols)){if(T[sym]&&x.last){T[sym][3]=x.last;if(x.prevClose)T[sym][4]=(x.last/x.prevClose-1)*100}}
+      for(const k in cache)delete cache[k];
+      const g=new Date(d.generated);
+      const when=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Stockholm',weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).format(g);
+      document.getElementById('upd').innerHTML=`<i></i>Kurser hämtade ${when} · Norden ~15 min fördröjd`;
+      const b=document.getElementById('badge');b.textContent='Riktig kursdata · case-texter exempel';b.classList.add('ok');
+      renderStrip();render();return;
+    }catch(e){}
+  }
+})();
 })();
 </script>
