@@ -29,7 +29,7 @@ from pathlib import Path
 
 LOCAL_TZ = "Europe/Stockholm"
 
-# page symbol -> (Yahoo symbol, currency, is_us)
+# page symbol -> (Yahoo symbol, currency, 1-minute intraday bars (US) instead of 5-minute)
 SYMBOLS = {
     "NVDA": ("NVDA", "USD", True), "MSFT": ("MSFT", "USD", True), "AAPL": ("AAPL", "USD", True),
     "AMZN": ("AMZN", "USD", True), "META": ("META", "USD", True), "AVGO": ("AVGO", "USD", True),
@@ -47,6 +47,10 @@ SYMBOLS = {
     "EQNR": ("EQNR.OL", "NOK", False), "MOWI": ("MOWI.OL", "NOK", False),
     "NESTE": ("NESTE.HE", "EUR", False), "KNEBV": ("KNEBV.HE", "EUR", False),
     "NOKIA": ("NOKIA.HE", "EUR", False),
+    # indices and commodities (front-month futures), tradable via certificates
+    "OMXS30": ("^OMX", "SEK", False), "SPX": ("^GSPC", "USD", True), "NDX100": ("^NDX", "USD", True),
+    "GOLD": ("GC=F", "USD", False), "SILVER": ("SI=F", "USD", False),
+    "COPPER": ("HG=F", "USD", False), "BRENT": ("BZ=F", "USD", False),
 }
 
 # value: Yahoo symbol, or candidates tried in order (the first with data wins)
