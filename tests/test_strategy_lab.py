@@ -74,6 +74,23 @@ class Lab(unittest.TestCase):
         rets, _ = lab.strategy_returns(prices, lab.xs_momentum, {"lookback": 126, "top": 2}, cost_pct=0, rotation=True)
         self.assertAlmostEqual(lab.portfolio(rets).iloc[-1], 0.002, places=6)  # half in each winner
 
+    def test_weekly_run_uses_52_bars_per_year(self):
+        idx = pd.date_range("2016-01-04", periods=520, freq="W-MON")
+        mk = lambda g: pd.DataFrame({"o": g, "h": g * 1.01, "l": g * 0.99, "c": g}, index=idx)
+        prices = {f"S{i}": mk(100 * np.cumprod(np.full(520, 1.002 + i / 10000))) for i in range(5)}
+        bh = lab.metrics(lab.portfolio(lab.strategy_returns(prices, lab.buy_hold, {}, 0, ppy=lab.WEEKS)[0]).iloc[1:], ppy=lab.WEEKS)
+        self.assertAlmostEqual(bh["cagr"], ((1.0022 ** 52) - 1) * 100, delta=0.2)
+        res = lab.run(prices, cost_pct=0.1, families=lab.WEEKLY_FAMILIES, ppy=lab.WEEKS)
+        self.assertEqual(res["bars"], "week")
+        self.assertEqual(res["configs_tested"], sum(len(f["grid"]) for f in lab.WEEKLY_FAMILIES.values()))
+        self.assertEqual({f["id"] for f in res["families"]}, set(lab.WEEKLY_FAMILIES))
+        # the first re-selection needs two years of weekly history
+        self.assertEqual(res["period"]["wf_start"], str(idx[104].date()))
+
+    def test_weekly_grids_stay_small(self):
+        for key, fam in lab.WEEKLY_FAMILIES.items():
+            self.assertLessEqual(len(fam["grid"]), 4, key)
+
 
 if __name__ == "__main__":
     unittest.main()
