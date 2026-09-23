@@ -21,7 +21,7 @@ class EncryptData(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         (self.tmp / "src").mkdir()
-        (self.tmp / "src" / "intra.json").write_text('{"part":"intra","x":"åäö"}', encoding="utf-8")
+        (self.tmp / "src" / "intra.json").write_text('{"part":"intra","generated":"2026-09-23T14:00:00+00:00","x":"åäö"}', encoding="utf-8")
         (self.tmp / "src" / "daily.json").write_text('{"part":"daily"}', encoding="utf-8")
 
     def tearDown(self):
@@ -34,6 +34,8 @@ class EncryptData(unittest.TestCase):
     def test_roundtrip_per_user(self):
         written = encrypt_dir(self.tmp / "src", self.tmp / "dst", {"anna": "pw1", "per": "pw2"}, ITER)
         self.assertEqual(written, ["intra.enc.json", "daily.enc.json"])
+        manifest = json.loads((self.tmp / "dst" / "manifest.json").read_text())
+        self.assertEqual(manifest, {"intra": "2026-09-23T14:00:00+00:00", "daily": None})
         auth = json.loads((self.tmp / "dst" / "auth.json").read_text())
         self.assertNotIn("anna", json.dumps(auth))  # user names are hashed
         box = auth["users"][user_id("Anna")]

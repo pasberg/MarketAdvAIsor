@@ -59,7 +59,7 @@ class Build(unittest.TestCase):
         self.assertIn("prevClose", volvo)
         self.assertIn("OMXS30", intra["indices"])
         self.assertEqual(set(data["daily"]["symbols"]["VOLV-B"]["series"]), {"day", "week"})
-        self.assertEqual(set(data["hour"]["symbols"]["VOLV-B"]["series"]), {"hour"})
+        self.assertEqual(set(data["hour"]["symbols"]["VOLV-B"]["series"]), {"hour", "intra5"})
 
     def test_single_part(self):
         self.assertEqual(set(build(FakeYF, ["hour"])), {"hour"})

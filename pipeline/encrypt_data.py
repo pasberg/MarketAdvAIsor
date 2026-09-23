@@ -85,6 +85,13 @@ def encrypt_dir(src: Path, dst: Path, users: dict[str, str], iterations: int = I
     auth = {"v": 1, "kdf": "PBKDF2-SHA256", "iterations": iterations, "saltPrefix": SALT_PREFIX.decode(),
             "users": {user_id(u): seal(derive_kek(u, p, iterations), dek) for u, p in users.items()}}
     (dst / "auth.json").write_text(json.dumps(auth), encoding="utf-8")
+    # when each part was generated, so the page only downloads parts that changed
+    manifest = {}
+    for part in PARTS:
+        f = src / f"{part}.json"
+        if f.exists():
+            manifest[part] = json.loads(f.read_text(encoding="utf-8")).get("generated")
+    (dst / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     return written
 
 

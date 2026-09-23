@@ -6,7 +6,7 @@ publishing the site.
 
 Output: one file per part in --out-dir, refreshed at different rates:
   intra.json  intraday bars, last price, previous close, index strip (every 5 min)
-  hour.json   hourly bars (every 30 min)
+  hour.json   hourly bars and five sessions of 5-minute bars (every 30 min)
   daily.json  daily and weekly bars (twice a day)
 Each file: {"part", "generated": "<ISO UTC>", "source", "tz",
             "symbols": {"VOLV-B": {"currency", "last"?, "prevClose"?, "asOf"?,
@@ -58,11 +58,13 @@ INDICES = {
 }
 
 # series key -> yfinance (interval, period, max bars kept)
+# Longer history than the charts show, so the backtest has enough past signals.
 SERIES = {
-    "hour": ("60m", "1mo", 120),
-    "day": ("1d", "1y", 250),
-    "week": ("1wk", "5y", 160),
+    "hour": ("60m", "3mo", 450),
+    "day": ("1d", "5y", 1000),
+    "week": ("1wk", "10y", 520),
 }
+INTRA_HIST = ("5m", "5d", 600)  # last five sessions in 5-minute bars, for the intraday backtest
 INTRA = {True: ("1m", "5d"), False: ("5m", "5d")}  # US 1-minute, Nordic 5-minute
 
 
@@ -175,7 +177,10 @@ def build_intra(yf) -> dict:
 def build_hour(yf) -> dict:
     part = _new_part("hour")
     interval, period, n = SERIES["hour"]
-    _put(part, "hour", _download(yf, [y for y, _, _ in SYMBOLS.values()], interval, period), interval, n)
+    tick = [y for y, _, _ in SYMBOLS.values()]
+    _put(part, "hour", _download(yf, tick, interval, period), interval, n)
+    interval, period, n = INTRA_HIST
+    _put(part, "intra5", _download(yf, tick, interval, period), interval, n)
     return part
 
 

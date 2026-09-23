@@ -39,6 +39,7 @@
   --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -14px rgba(0,0,0,.6);
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.5}
 .wrap{max-width:1360px;margin:0 auto;padding-inline:20px;padding-block:0 48px}
 .num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
@@ -258,6 +259,33 @@ table.wl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
 .wt td.hi{font-weight:600;color:var(--accent)}
 .disc{margin-top:24px;padding-top:16px;border-top:1px solid var(--line);font-size:12px;color:var(--faint)}
 
+/* backtest */
+.bt{margin-top:18px}
+.bt-bar{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between}
+.bt-intro{margin:0;color:var(--muted);max-width:78ch;font-size:13.5px}
+.bt-f{display:grid;gap:4px;font-size:12px;color:var(--muted);font-weight:500}
+.bt-f select{font:500 14px var(--body);padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)}
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:16px}
+.kp{background:var(--surface);padding:12px 14px}
+.kp .l{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+.kp .v{font-family:var(--mono);font-size:22px;font-weight:500;margin-top:2px}
+.kp .s{font-size:12px;color:var(--muted)}
+.bt-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:20px;margin-top:20px;align-items:start}
+.bt-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.bt-card h3{margin:0;padding:14px 16px 0}
+.eq{height:260px;position:relative;margin:8px 12px 12px}
+.bt-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.bt-tbl th{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;text-align:right;padding:8px 12px;border-bottom:1px solid var(--line)}
+.bt-tbl th:first-child,.bt-tbl td:first-child{text-align:left}
+.bt-tbl td{padding:7px 12px;border-bottom:1px solid var(--line-2);text-align:right;font-family:var(--mono)}
+.bt-tbl td:first-child{font-family:var(--body)}
+.bt-tbl tr:last-child td{border-bottom:0}
+.bt-scroll{overflow-x:auto}
+.res{font-size:11px;font-weight:600;padding:2px 7px;border-radius:5px;font-family:var(--body)}
+.res.tp{background:var(--up-soft);color:var(--up)} .res.sl{background:var(--down-soft);color:var(--down)} .res.tid{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
+.bt-note{font-size:12px;color:var(--faint);margin-top:14px;max-width:90ch}
+.bt-empty{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:20px;color:var(--muted);margin-top:16px}
+@media (max-width:1100px){.bt-grid{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
 /* login gate */
 body.locked .top,body.locked main{filter:blur(7px) saturate(.7);pointer-events:none;user-select:none}
 .gate{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:16px;background:color-mix(in srgb,var(--bg) 45%,rgba(8,14,12,.55))}
@@ -302,9 +330,10 @@ body.locked .top,body.locked main{filter:blur(7px) saturate(.7);pointer-events:n
       <span>MarketAdv<b>AI</b>sor</span>
     </div>
     <nav class="nav" aria-label="Huvudmeny">
-      <a href="#top" aria-current="page">Analyser</a>
+      <a href="#top" aria-current="page" data-view="analys">Analyser</a>
       <a href="#bevakning">Bevakning</a>
-      <a href="#metod">Metod</a>
+      <a href="#backtest" data-view="backtest">Backtest</a>
+      <a href="#metod" id="nav-metod">Metod</a>
     </nav>
     <div class="top-meta">
       <span class="live" id="upd"><i></i>Exempeldata · ons 23 sep 2026 15:50</span>
@@ -336,6 +365,16 @@ body.locked .top,body.locked main{filter:blur(7px) saturate(.7);pointer-events:n
     </aside>
     <article class="detail" id="detail" aria-live="polite"></article>
   </div>
+
+  <section class="bt" id="bt" hidden>
+    <div class="bt-bar">
+      <p class="bt-intro">Samma regler som sätter dagens nivåer körs bakåt i tiden, stapel för stapel och bara med den data som fanns då. Varje signal följs tills stop loss, målen eller tidsgränsen nås. ⅓ av positionen säljs vid varje TP.</p>
+      <label class="bt-f" for="bt-min">Minsta poäng
+        <select id="bt-min"><option value="0">Alla signaler</option><option value="60">60</option><option value="65" selected>65</option><option value="70">70</option><option value="75">75</option></select>
+      </label>
+    </div>
+    <div id="bt-out"></div>
+  </section>
 
   <section class="watch" id="bevakning">
     <h2 class="sec-t"><span>Att hålla koll på</span><span id="wl-count"></span></h2>
@@ -689,8 +728,12 @@ function realModel(item,hz){
   const H=HZ[hz],sym=REAL&&REAL.symbols[item.s],ser=sym&&sym.series[SER_KEY[H.kind]];
   if(!ser||ser.c.length<30)return null;
   const n=Math.min(SER_N[hz],ser.c.length),off=ser.c.length-n;
-  const c=[];for(let i=off;i<ser.c.length;i++)c.push({time:ser.t[i],open:ser.o[i],high:ser.h[i],low:ser.l[i],close:ser.c[i],vol:ser.v[i]});
-  const N=c.length,t=T[item.s],s=item.dir==='L'?1:-1,P=c[N-1].close;
+  return analyzeCandles(toCandles(ser,off,ser.c.length),item,hz);
+}
+function toCandles(ser,from,to){const c=[];for(let i=from;i<to;i++)c.push({time:ser.t[i],open:ser.o[i],high:ser.h[i],low:ser.l[i],close:ser.c[i],vol:ser.v[i]});return c}
+// Levels and computed scores from a candle window (only data up to the last candle is used).
+function analyzeCandles(c,item,hz){
+  const H=HZ[hz],N=c.length,t=T[item.s],s=item.dir==='L'?1:-1,P=c[N-1].close;
   // impulse in the pick's direction: extreme of the window and the opposite extreme before it
   const hiI=a=>a.reduce((b,x,i)=>x.high>a[b].high?i:b,0),loI=a=>a.reduce((b,x,i)=>x.low<a[b].low?i:b,0);
   let endI=s>0?hiI(c):loI(c);if(endI<5)endI=s>0?hiI(c.slice(0,N-3)):loI(c.slice(0,N-3));
@@ -791,8 +834,8 @@ function instruments(m){
 }
 
 // ---------- state
-const state={hz:'intradag',mkt:'all',sel:null,ov:{lv:true,fib:true,ew:true,ema:true,vwap:true,vol:true,rsi:true},cap:250000,riskPct:1,ins:null};
-try{const h=location.hash.slice(1);if(HZ[h])state.hz=h}catch(e){}
+const state={view:'analys',hz:'intradag',mkt:'all',sel:null,ov:{lv:true,fib:true,ew:true,ema:true,vwap:true,vol:true,rsi:true},cap:250000,riskPct:1,ins:null};
+try{const h=location.hash.slice(1);if(HZ[h])state.hz=h;if(h==='backtest')state.view='backtest'}catch(e){}
 try{const v=JSON.parse(localStorage.getItem('maa-ui2')||'null');if(v){Object.assign(state.ov,v.ov||{});if(v.cap)state.cap=v.cap;if(v.riskPct)state.riskPct=v.riskPct;if(!HZ[location.hash.slice(1)]&&HZ[v.hz])state.hz=v.hz}}catch(e){}
 const save=()=>{try{localStorage.setItem('maa-ui2',JSON.stringify({ov:state.ov,cap:state.cap,riskPct:state.riskPct,hz:state.hz}))}catch(e){}};
 const inMkt=s=>state.mkt==='all'||T[s][5].split(' ').includes(state.mkt);
@@ -823,8 +866,12 @@ function renderHz(){
   document.getElementById('hz').innerHTML=HZ_ORDER.map(k=>{const H=HZ[k];const tf={intra:'1–5 min',hour:'1 timme',day:'1 dag',week:'1 vecka'}[H.kind];
     return `<button role="tab" id="tab-${k}" aria-selected="${k===state.hz}" data-hz="${k}"><span class="t">${H.t}</span><span class="s">${H.valid} · ${tf}</span></button>`}).join('');
   const H=HZ[state.hz];
-  document.getElementById('h1').textContent='Top picks · '+H.t;
-  document.getElementById('hsub').textContent=H.sub;
+  const bt=state.view==='backtest';
+  document.getElementById('h1').textContent=(bt?'Backtest · ':'Top picks · ')+H.t;
+  document.getElementById('hsub').textContent=bt?'Hade rekommendationerna fungerat? Reglerna för entry, stop loss och mål testade på historisk data.':H.sub;
+  document.querySelector('.layout').hidden=bt;document.getElementById('bevakning').hidden=bt;document.getElementById('metod').hidden=bt;
+  document.getElementById('bt').hidden=!bt;
+  document.querySelectorAll('.nav a').forEach(a=>{const v=a.dataset.view;if((v==='backtest')===bt&&v)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
   document.getElementById('regime').innerHTML=H.regime.map(([a,b])=>`<span>${a} <b>${b}</b></span>`).join('');
   const mk=[['all','Alla marknader'],['ndx','Nasdaq'],['spx','S&P 500'],['nord','Norden'],['index','Index'],['ravara','Råvaror']];
   document.getElementById('mk').innerHTML=mk.map(([k,l])=>`<button class="chip" aria-pressed="${state.mkt===k}" data-mkt="${k}">${l}</button>`).join('');
@@ -1036,9 +1083,101 @@ function calc(m){
   <div><span>Vinst vid TP2</span><span class="num pos">+${nf0.format(n*m.risk*fx*m.rr[1])} SEK</span></div>`;
 }
 
+// ---------- backtest: replay the level rules on history, no look-ahead
+// ser: data series; W: bars the analysis sees; K: max bars a trade is held; E: bars the entry order stays open
+const BT={intradag:{ser:'intra5',W:24,E:12,session:true},vecka:{ser:'hour',W:90,K:35,E:9},manad:{ser:'day',W:90,K:21,E:5},
+  kvartal:{ser:'day',W:160,K:63,E:15},halvar:{ser:'week',W:80,K:26,E:6},ar:{ser:'week',W:130,K:52,E:12}};
+const dayOf=t=>Math.floor(t/86400);
+function simulate(item,hz,minScore){
+  const cfg=BT[hz],ser=REAL&&REAL.symbols[item.s]&&REAL.symbols[item.s].series[cfg.ser];
+  if(!ser||ser.c.length<cfg.W+5)return null;
+  const all=toCandles(ser,0,ser.c.length),n=all.length,trades=[];let missed=0,t=cfg.W-1;
+  while(t<n-1){
+    let from=t-cfg.W+1,last=Math.min(n-1,t+(cfg.K||0));
+    if(cfg.session){ // intraday: only the current session, exit at its last bar
+      let a=t;while(a>0&&dayOf(all[a-1].time)===dayOf(all[t].time))a--;
+      if(t-a+1<cfg.W){t++;continue}
+      from=a;last=t;while(last<n-1&&dayOf(all[last+1].time)===dayOf(all[t].time))last++;
+    }
+    const m=analyzeCandles(all.slice(from,t+1),item,hz),s=m.s,lv=m.lv;
+    if(m.score<minScore||s*(m.P-lv.sl)<=0||last<=t){t++;continue}
+    let j=-1,fill=0;
+    for(let k=t+1;k<=Math.min(t+cfg.E,last);k++){const b=all[k];
+      if(s*(b.open-lv.sl)<=0)break; // opened beyond the stop: setup no longer valid, no trade
+      if(s>0?b.low<=lv.entry:b.high>=lv.entry){j=k;fill=s>0?Math.min(lv.entry,b.open):Math.max(lv.entry,b.open);break}}
+    if(j<0){missed++;t+=cfg.E;continue}
+    const risk=Math.abs(lv.entry-lv.sl),tps=[lv.tp1,lv.tp2,lv.tp3],R=[];let hit=0,exitI=last,res='tid';
+    for(let k=j;k<=last&&R.length<3;k++){const b=all[k];
+      if(s>0?b.low<=lv.sl:b.high>=lv.sl){const px=s>0?Math.min(lv.sl,b.open):Math.max(lv.sl,b.open);while(R.length<3)R.push(s*(px-fill)/risk);exitI=k;res=hit?'tp':'sl';break}
+      while(hit<3&&(s>0?b.high>=tps[hit]:b.low<=tps[hit])){R.push(s*(tps[hit]-fill)/risk);hit++;exitI=k;res='tp'}
+    }
+    if(R.length<3){const px=all[last].close;while(R.length<3)R.push(s*(px-fill)/risk);exitI=last;if(!hit)res='tid'}
+    const r=(R[0]+R[1]+R[2])/3;
+    trades.push({s:item.s,dir:item.dir,t0:all[t].time,t1:all[exitI].time,entry:fill,sl:lv.sl,r,hit,res,bars:exitI-j+1,score:m.score});
+    t=exitI+1;
+  }
+  return {trades,missed,from:all[cfg.W-1].time,to:all[n-1].time};
+}
+let btToken=0,eqChart=null;
+function fmtDate(t,withTime){const d=new Date(t*1000),m=['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'][d.getUTCMonth()];
+  return withTime?`${d.getUTCDate()} ${m} ${hm(d.getUTCHours()*60+d.getUTCMinutes())}`:`${d.getUTCDate()} ${m} ${d.getUTCFullYear()}`}
+function renderBacktest(){
+  const out=document.getElementById('bt-out'),hz=state.hz,token=++btToken;
+  if(eqChart){eqChart.remove();eqChart=null}
+  if(!REAL){out.innerHTML='<div class="bt-empty">Backtest kräver riktig kursdata. Logga in, eller vänta tills kurserna har laddats.</div>';return}
+  out.innerHTML='<div class="bt-empty">Räknar…</div>';
+  setTimeout(()=>{
+    if(token!==btToken)return;
+    const p=pool(hz),seen=new Set(),items=[...p.top,...p.watch].filter(it=>!seen.has(it.s)&&seen.add(it.s)&&inMkt(it.s));
+    const min=+document.getElementById('bt-min').value,rows=[];let trades=[],missed=0,from=Infinity,to=0;
+    for(const it of items){const r=simulate(it,hz,min);if(!r)continue;
+      rows.push({it,...r});trades=trades.concat(r.trades);missed+=r.missed;from=Math.min(from,r.from);to=Math.max(to,r.to)}
+    if(!rows.length){out.innerHTML=`<div class="bt-empty">För lite historik för ${HZ[hz].t.toLowerCase()} i den hämtade datan. ${hz==='intradag'?'Intradag kräver 5-minutersdata för flera dagar — den kommer med nästa uppdatering av timdatan.':''}</div>`;return}
+    trades.sort((a,b)=>a.t1-b.t1);
+    const N=trades.length,wins=trades.filter(x=>x.r>0).length,tp1=trades.filter(x=>x.hit>0).length,sum=trades.reduce((a,x)=>a+x.r,0);
+    let eq=0,peak=0,dd=0;const curve=[];let lastT=0;
+    for(const x of trades){eq+=x.r;peak=Math.max(peak,eq);dd=Math.min(dd,eq-peak);const tt=Math.max(x.t1,lastT+1);lastT=tt;curve.push({time:tt,value:eq})}
+    const gw=trades.filter(x=>x.r>0).reduce((a,x)=>a+x.r,0),gl=-trades.filter(x=>x.r<0).reduce((a,x)=>a+x.r,0);
+    const withTime=HZ[hz].kind==='intra'||HZ[hz].kind==='hour',pct=(a,b)=>b?Math.round(a/b*100)+' %':'–';
+    const kp=(l,v,sub,cls='')=>`<div class="kp"><div class="l">${l}</div><div class="v ${cls}">${v}</div><div class="s">${sub}</div></div>`;
+    out.innerHTML=`
+      <div class="kpis">
+        ${kp('Affärer',N,`${missed} signaler triggade aldrig`)}
+        ${kp('Nådde TP1',pct(tp1,N),'andel av affärerna')}
+        ${kp('Vinnande',pct(wins,N),'slutade med vinst')}
+        ${kp('Snitt per affär',N?sgn(sum/N,f2)+'R':'–','förväntat värde',sum>=0?'pos':'neg')}
+        ${kp('Summa',sgn(sum)+'R',`vinstfaktor ${gl?f2(gw/gl):'–'}`,sum>=0?'pos':'neg')}
+        ${kp('Största nedgång',f1(dd)+'R','från topp till botten','neg')}
+      </div>
+      <div class="bt-grid">
+        <div class="bt-card"><h3 class="sec-t"><span>Resultatkurva</span><span>summa R · ${fmtDate(from,withTime)} – ${fmtDate(to,withTime)}</span></h3><div class="eq" id="eq"></div></div>
+        <div class="bt-card"><h3 class="sec-t"><span>Per instrument</span><span>${rows.length} instrument</span></h3>
+          <div class="bt-scroll"><table class="bt-tbl"><thead><tr><th>Instrument</th><th>Affärer</th><th>TP1</th><th>Vinst</th><th>Snitt R</th><th>Summa R</th></tr></thead><tbody>
+          ${rows.map(r=>{const t=r.trades,n=t.length,s=t.reduce((a,x)=>a+x.r,0);return `<tr><td><span class="dir ${r.it.dir}">${r.it.dir==='L'?'L':'K'}</span> ${esc(r.it.s)}</td><td>${n}</td><td>${pct(t.filter(x=>x.hit).length,n)}</td><td>${pct(t.filter(x=>x.r>0).length,n)}</td><td class="${s>=0?'pos':'neg'}">${n?sgn(s/n,f2):'–'}</td><td class="${s>=0?'pos':'neg'}">${n?sgn(s):'–'}</td></tr>`}).join('')}
+          </tbody></table></div></div>
+      </div>
+      <div class="bt-card" style="margin-top:20px"><h3 class="sec-t"><span>Senaste affärerna</span><span>de 30 senaste</span></h3>
+        <div class="bt-scroll"><table class="bt-tbl"><thead><tr><th>Signal</th><th>Instrument</th><th>Poäng</th><th>Entry</th><th>Stop loss</th><th>Utfall</th><th>Staplar</th><th>R</th></tr></thead><tbody>
+        ${trades.slice(-30).reverse().map(x=>`<tr><td>${fmtDate(x.t0,withTime)}</td><td><span class="dir ${x.dir}">${x.dir==='L'?'L':'K'}</span> ${esc(x.s)}</td><td>${x.score}</td><td>${f2(x.entry)}</td><td>${f2(x.sl)}</td><td><span class="res ${x.res}">${x.res==='sl'?'Stop loss':x.res==='tp'?`TP${x.hit}${x.hit<3?' + '+(x.r>=0?'rest':'SL'):''}`:'Tidsgräns'}</span></td><td>${x.bars}</td><td class="${x.r>=0?'pos':'neg'}">${sgn(x.r,f2)}</td></tr>`).join('')||'<tr><td colspan="8">Inga affärer med vald minsta poäng.</td></tr>'}
+        </tbody></table></div></div>
+      <p class="bt-note">Så räknas det: en signal ges när poängen är minst ${min||'0'} och priset ligger ovanför stop loss (under för korta affärer). En köporder läggs vid entrynivån och gäller i ${BT[hz].E} staplar. ⅓ säljs vid TP1, TP2 och TP3; resten stoppas vid stop loss eller säljs vid ${BT[hz].session?'dagens stängning':`tidsgränsen (${BT[hz].K} staplar)`}. Om stop loss och mål nås i samma stapel räknas stop loss (försiktigt antagande). R = resultat i antal risker (1R = avståndet entry → stop loss). Courtage, spread och hävstångsprodukternas kostnader ingår inte. Bara de beräknade delarna (teknisk analys, momentum och Fibonacci) varierar över tiden; fundamenta, Elliott och sentiment är fasta värden från dagens case. Historiskt resultat är ingen garanti för framtiden.</p>`;
+    const el=document.getElementById('eq'),LW=window.LightweightCharts;
+    if(el&&LW&&curve.length){
+      const C=n=>cssVar('--'+n);
+      eqChart=LW.createChart(el,{autoSize:true,layout:{background:{type:'solid',color:C('surface')},textColor:C('muted'),fontFamily:'JetBrains Mono, monospace',fontSize:11,attributionLogo:true},
+        grid:{vertLines:{visible:false},horzLines:{color:C('line-2')}},rightPriceScale:{borderColor:C('line')},timeScale:{borderColor:C('line'),timeVisible:withTime},
+        localization:{locale:'sv-SE',priceFormatter:v=>f1(v)+'R'}});
+      const up=sum>=0,ser=eqChart.addSeries(LW.BaselineSeries,{baseValue:{type:'price',price:0},topLineColor:C('up'),bottomLineColor:C('down'),
+        topFillColor1:C('up-soft'),topFillColor2:'rgba(0,0,0,0)',bottomFillColor1:'rgba(0,0,0,0)',bottomFillColor2:C('down-soft'),lineWidth:2,priceLineVisible:false});
+      ser.setData(curve);eqChart.timeScale().fitContent();
+    }
+  },20);
+}
+
 let current=null;
 function render(){
   renderHz();
+  if(state.view==='backtest'){renderBacktest();return}
   const {tops,watch}=renderPicks();
   let m=null;
   if(state.sel){const list=state.sel.kind==='top'?tops:watch;m=list.find(x=>x.item.s===state.sel.s)||null}
@@ -1049,11 +1188,17 @@ function render(){
 // ---------- events
 document.addEventListener('click',e=>{
   if(e.target.closest('a'))return;
-  const hz=e.target.closest('[data-hz]');if(hz){state.hz=hz.dataset.hz;state.sel=null;state.ins=null;save();try{history.replaceState(null,'','#'+state.hz)}catch(_){}render();return}
+  const hz=e.target.closest('[data-hz]');if(hz){state.hz=hz.dataset.hz;state.sel=null;state.ins=null;save();try{history.replaceState(null,'','#'+(state.view==='backtest'?'backtest':state.hz))}catch(_){}render();return}
   const mk=e.target.closest('[data-mkt]');if(mk){state.mkt=mk.dataset.mkt;state.sel=null;render();return}
   const sel=e.target.closest('[data-sel]');if(sel){const [kind,s]=sel.dataset.sel.split(':');state.sel={kind,s};state.ins=null;render();
     if(kind==='watch'||window.innerWidth<1100)document.getElementById('detail').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})}
 });
+document.querySelectorAll('.nav a[data-view]').forEach(a=>a.addEventListener('click',e=>{
+  e.preventDefault();state.view=a.dataset.view;try{history.replaceState(null,'','#'+(state.view==='backtest'?'backtest':state.hz))}catch(_){}
+  render();window.scrollTo({top:0,behavior:'auto'});
+}));
+document.getElementById('nav-metod').addEventListener('click',()=>{if(state.view!=='analys'){state.view='analys';render()}});
+document.getElementById('bt-min').addEventListener('change',()=>{if(state.view==='backtest')renderBacktest()});
 document.addEventListener('keydown',e=>{const tr=e.target.closest('tr[data-sel]');if(tr&&(e.key==='Enter'||e.key===' ')){e.preventDefault();tr.click()}
   const tab=e.target.closest('[data-hz]');if(tab&&(e.key==='ArrowRight'||e.key==='ArrowLeft')){const i=HZ_ORDER.indexOf(state.hz)+(e.key==='ArrowRight'?1:-1);if(HZ_ORDER[i]){state.hz=HZ_ORDER[i];state.sel=null;state.ins=null;render();document.getElementById('tab-'+state.hz).focus()}}});
 document.addEventListener('change',e=>{
@@ -1149,13 +1294,20 @@ document.getElementById('login').addEventListener('submit',async e=>{
 document.getElementById('logout').addEventListener('click',()=>{clearSession();location.reload()});
 
 let dataBase='data/';
+const partCache={}; // part -> {gen, data}: parts whose manifest time is unchanged are not downloaded again
 async function fetchParts(base,auth){
-  if(!auth)return mergeParts(await Promise.all(['intra','hour','daily'].map(p=>getJSON(base+p+'.json'))))||mergeParts([await getJSON(base+'market.json')]);
-  const dekRaw=await unwrapDek(auth,session);
-  if(!dekRaw)return 'locked';
-  const boxes=await Promise.all(['intra','hour','daily'].map(p=>getJSON(base+p+'.enc.json')));
-  const parts=await Promise.all(boxes.map(async bx=>{if(!bx)return null;try{return JSON.parse(new TextDecoder().decode(await openBox(dekRaw,bx)))}catch(e){return null}}));
-  return mergeParts(parts);
+  let dekRaw=null;
+  if(auth){dekRaw=await unwrapDek(auth,session);if(!dekRaw)return 'locked'}
+  const manifest=await getJSON(base+'manifest.json');
+  const parts=await Promise.all(['intra','hour','daily'].map(async p=>{
+    const hit=partCache[p];if(manifest&&hit&&manifest[p]&&hit.gen===manifest[p])return hit.data;
+    let d=null;
+    if(auth){const bx=await getJSON(base+p+'.enc.json');if(bx){try{d=JSON.parse(new TextDecoder().decode(await openBox(dekRaw,bx)))}catch(e){}}}
+    else d=await getJSON(base+p+'.json');
+    if(d)partCache[p]={gen:d.generated,data:d};
+    return d;
+  }));
+  return mergeParts(parts)||(auth?null:mergeParts([await getJSON(base+'market.json')]));
 }
 async function loadData(){
   if(loading)return;loading=true;
