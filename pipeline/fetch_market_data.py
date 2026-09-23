@@ -4,16 +4,14 @@ Source: Yahoo Finance via the yfinance package (unofficial, personal use only;
 Nordic quotes are delayed ~15 minutes). Replace with a licensed provider before
 publishing the site.
 
-Output (default data/market.json):
-{
-  "generated": "<ISO UTC>", "source": "...", "tz": "Europe/Stockholm",
-  "symbols": {"VOLV-B": {"currency": "SEK", "last": 284.3, "prevClose": 278.0,
-               "series": {"intra": {"interval": "5m", "t": [...], "o": [...], "h": [...],
-                                    "l": [...], "c": [...], "v": [...]},
-                          "hour": {...}, "day": {...}, "week": {...}}}},
-  "indices": {"OMXS30": {"last": ..., "prevClose": ..., "spark": [...]}},
-  "errors": {"SYM/series": "message"}
-}
+Output: one file per part in --out-dir, refreshed at different rates:
+  intra.json  intraday bars, last price, previous close, index strip (every 5 min)
+  hour.json   hourly bars (every 30 min)
+  daily.json  daily and weekly bars (twice a day)
+Each file: {"part", "generated": "<ISO UTC>", "source", "tz",
+            "symbols": {"VOLV-B": {"currency", "last"?, "prevClose"?, "asOf"?,
+                                   "series": {"intra": {"interval", "t", "o", "h", "l", "c", "v"}}}},
+            "indices"? (intra only), "errors": {"SYM/series": "message"}}
 Timestamps are Stockholm wall-clock time encoded as UTC epoch seconds (what the
 chart library displays as-is); daily and weekly bars use midnight of the bar's date.
 """
@@ -120,73 +118,107 @@ def _download(yf, tickers: list[str], interval: str, period: str) -> dict:
     return out
 
 
-def build(yf) -> dict:
-    result = {"generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-              "source": "Yahoo Finance (yfinance) — endast för prototyp",
-              "tz": LOCAL_TZ, "symbols": {}, "indices": {}, "errors": {}}
-    for sym, (_, cur, _) in SYMBOLS.items():
-        result["symbols"][sym] = {"currency": cur, "series": {}}
+PARTS = ("intra", "hour", "daily")
 
-    def put(key: str, frames: dict, interval: str, max_bars: int, last_session: bool = False):
-        for sym, (ysym, _, _) in SYMBOLS.items():
-            if ysym not in frames:
-                continue
-            try:
-                s = frame_to_series(frames[ysym], interval, max_bars, last_session)
-                if s:
-                    result["symbols"][sym]["series"][key] = s
-                else:
-                    result["errors"][f"{sym}/{key}"] = "ingen data"
-            except Exception as e:  # keep going; one bad ticker must not stop the run
-                result["errors"][f"{sym}/{key}"] = str(e)[:200]
 
+def _new_part(name: str) -> dict:
+    return {"part": name, "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "source": "Yahoo Finance (yfinance) — endast för prototyp", "tz": LOCAL_TZ,
+            "symbols": {sym: {"currency": cur, "series": {}} for sym, (_, cur, _) in SYMBOLS.items()},
+            "errors": {}}
+
+
+def _put(part: dict, key: str, frames: dict, interval: str, max_bars: int, last_session: bool = False):
+    for sym, (ysym, _, _) in SYMBOLS.items():
+        if ysym not in frames:
+            continue
+        try:
+            s = frame_to_series(frames[ysym], interval, max_bars, last_session)
+            if s:
+                part["symbols"][sym]["series"][key] = s
+            else:
+                part["errors"][f"{sym}/{key}"] = "ingen data"
+        except Exception as e:  # keep going; one bad ticker must not stop the run
+            part["errors"][f"{sym}/{key}"] = str(e)[:200]
+
+
+def build_intra(yf) -> dict:
+    """Intraday bars, last price / previous close and the index strip — refreshed every few minutes."""
+    part = _new_part("intra")
     for is_us, (interval, period) in INTRA.items():
         tick = [y for y, _, us in SYMBOLS.values() if us == is_us]
-        put("intra", _download(yf, tick, interval, period), interval, 420, last_session=True)
-    all_tick = [y for y, _, _ in SYMBOLS.values()]
-    for key, (interval, period, n) in SERIES.items():
-        put(key, _download(yf, all_tick, interval, period), interval, n)
-
-    for sym, info in result["symbols"].items():
-        day = info["series"].get("day")
+        _put(part, "intra", _download(yf, tick, interval, period), interval, 420, last_session=True)
+    quotes = _download(yf, [y for y, _, _ in SYMBOLS.values()], "1d", "5d")
+    for sym, (ysym, _, _) in SYMBOLS.items():
+        info = part["symbols"][sym]
+        q = frame_to_series(quotes.get(ysym), "1d", 5)
+        if q and len(q["c"]) >= 2:
+            info["prevClose"], info["last"] = q["c"][-2], q["c"][-1]
         intra = info["series"].get("intra")
-        if day and len(day["c"]) >= 2:
-            info["prevClose"] = day["c"][-2]
-            info["last"] = day["c"][-1]
         if intra and intra["c"]:
             info["last"] = intra["c"][-1]
             info["asOf"] = intra["t"][-1]
-
+    part["indices"] = {}
     cands = {name: ([y] if isinstance(y, str) else y) for name, y in INDICES.items()}
     idx_frames = _download(yf, [y for ys in cands.values() for y in ys], "1d", "3mo")
     for name, ysyms in cands.items():
         for ysym in ysyms:
             s = frame_to_series(idx_frames.get(ysym), "1d", 40)
             if s and len(s["c"]) >= 2:
-                result["indices"][name] = {"last": s["c"][-1], "prevClose": s["c"][-2], "spark": s["c"], "yahoo": ysym}
+                part["indices"][name] = {"last": s["c"][-1], "prevClose": s["c"][-2], "spark": s["c"], "yahoo": ysym}
                 break
         else:
-            result["errors"][f"index/{name}"] = "ingen data"
-    return result
+            part["errors"][f"index/{name}"] = "ingen data"
+    return part
+
+
+def build_hour(yf) -> dict:
+    part = _new_part("hour")
+    interval, period, n = SERIES["hour"]
+    _put(part, "hour", _download(yf, [y for y, _, _ in SYMBOLS.values()], interval, period), interval, n)
+    return part
+
+
+def build_daily(yf) -> dict:
+    part = _new_part("daily")
+    tick = [y for y, _, _ in SYMBOLS.values()]
+    for key in ("day", "week"):
+        interval, period, n = SERIES[key]
+        _put(part, key, _download(yf, tick, interval, period), interval, n)
+    return part
+
+
+BUILDERS = {"intra": build_intra, "hour": build_hour, "daily": build_daily}
+
+
+def build(yf, parts=PARTS) -> dict[str, dict]:
+    return {p: BUILDERS[p](yf) for p in parts}
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--out", default="data/market.json")
+    ap.add_argument("--out-dir", default="data")
+    ap.add_argument("--parts", default=",".join(PARTS),
+                    help="kommaseparerat: intra (var 5:e min), hour (var 30:e min), daily (2 ggr/dag)")
     args = ap.parse_args(argv)
+    parts = [p for p in args.parts.split(",") if p]
+    unknown = set(parts) - set(PARTS)
+    if unknown:
+        ap.error(f"okända delar: {', '.join(sorted(unknown))}")
     import yfinance as yf
 
-    data = build(yf)
-    ok = sum(1 for s in data["symbols"].values() if s["series"])
-    out = Path(args.out)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"{ok}/{len(SYMBOLS)} symboler med data, {len(data['indices'])} index, "
-          f"{len(data['errors'])} fel -> {out} ({out.stat().st_size // 1024} kB)")
-    if data["errors"]:
+    ok_all = True
+    for name, data in build(yf, parts).items():
+        ok = sum(1 for s in data["symbols"].values() if s["series"])
+        out = Path(args.out_dir) / f"{name}.json"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        print(f"{name}: {ok}/{len(SYMBOLS)} symboler med data, {len(data['errors'])} fel -> {out} "
+              f"({out.stat().st_size // 1024} kB)")
         for k, v in sorted(data["errors"].items())[:20]:
             print(f"  {k}: {v}")
-    return 0 if ok else 1
+        ok_all = ok_all and ok > 0
+    return 0 if ok_all else 1
 
 
 if __name__ == "__main__":

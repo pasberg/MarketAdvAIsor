@@ -1040,20 +1040,52 @@ try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>dra
 new MutationObserver(()=>drawChart(current)).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
 
 renderStrip();renderMethod();render();
-// Load real price data published next to the page (data/market.json); keep example data if absent.
-(async()=>{
-  for(const url of ['data/market.json','../data/market.json']){
-    try{const r=await fetch(url,{cache:'no-store'});if(!r.ok)continue;const d=await r.json();if(!d||!d.symbols)continue;
-      REAL=d;
-      for(const [sym,x] of Object.entries(d.symbols)){if(T[sym]&&x.last){T[sym][3]=x.last;if(x.prevClose)T[sym][4]=(x.last/x.prevClose-1)*100}}
-      for(const k in cache)delete cache[k];
-      const g=new Date(d.generated);
-      const when=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Stockholm',weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).format(g);
-      document.getElementById('upd').innerHTML=`<i></i>Kurser hämtade ${when} · Norden ~15 min fördröjd`;
-      const b=document.getElementById('badge');b.textContent='Riktig kursdata · case-texter exempel';b.classList.add('ok');
-      renderStrip();render();return;
-    }catch(e){}
-  }
-})();
+// Real price data published next to the page: data/intra.json (every 5 min), hour.json (every 30 min),
+// daily.json (twice a day); data/market.json is the older single-file format. Example data stays if none load.
+let loadedAt=0,loading=false;
+const fmtClock=d=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Stockholm',hour:'2-digit',minute:'2-digit'}).format(d);
+async function getJSON(url){try{const r=await fetch(url+(url.includes('?')?'&':'?')+'t='+Date.now(),{cache:'no-store'});return r.ok?await r.json():null}catch(e){return null}}
+function mergeParts(parts){
+  const out={symbols:{},indices:{},parts:{}};
+  for(const d of parts){if(!d||!d.symbols)continue;
+    out.parts[d.part||'all']=d.generated;
+    if(d.indices&&Object.keys(d.indices).length)out.indices=d.indices;
+    for(const [sym,x] of Object.entries(d.symbols)){
+      const t=out.symbols[sym]||(out.symbols[sym]={series:{}});
+      for(const k of ['currency','last','prevClose','asOf'])if(x[k]!=null)t[k]=x[k];
+      Object.assign(t.series,x.series||{});
+    }}
+  const gens=Object.values(out.parts);if(!gens.length)return null;
+  out.generated=out.parts.intra||out.parts.all||gens.sort().pop();
+  return out;
+}
+function updateAge(){
+  if(!REAL)return;const g=new Date(REAL.generated),min=Math.max(0,Math.round((Date.now()-g)/60000));
+  const ago=min<1?'nyss':min<60?`${min} min sedan`:min<1440?`${Math.floor(min/60)} h sedan`:`${Math.floor(min/1440)} d sedan`;
+  document.getElementById('upd').innerHTML=`<i${min>20?' style="background:var(--warn);box-shadow:0 0 0 3px var(--warn-soft)"':''}></i>Kurser ${fmtClock(g)} (${ago}) · Norden ~15 min fördröjd`;
+}
+async function loadData(){
+  if(loading)return;loading=true;
+  try{
+    for(const base of ['data/','../data/']){
+      let d=mergeParts(await Promise.all(['intra','hour','daily'].map(p=>getJSON(base+p+'.json'))));
+      if(!d)d=mergeParts([await getJSON(base+'market.json')]);
+      if(!d)continue;
+      const changed=!REAL||REAL.generated!==d.generated||JSON.stringify(REAL.parts)!==JSON.stringify(d.parts);
+      REAL=d;loadedAt=Date.now();
+      if(changed){
+        for(const [sym,x] of Object.entries(d.symbols)){if(T[sym]&&x.last){T[sym][3]=x.last;if(x.prevClose)T[sym][4]=(x.last/x.prevClose-1)*100}}
+        for(const k in cache)delete cache[k];
+        const b=document.getElementById('badge');b.textContent='Riktig kursdata · case-texter exempel';b.classList.add('ok');
+        renderStrip();render();
+      }
+      updateAge();return;
+    }
+  }finally{loading=false}
+}
+loadData();
+// Re-check for new data every 5 minutes while the page is visible; keep the age label current.
+setInterval(()=>{updateAge();if(document.visibilityState==='visible'&&Date.now()-loadedAt>5*60*1000)loadData()},30*1000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&Date.now()-loadedAt>5*60*1000)loadData()});
 })();
 </script>

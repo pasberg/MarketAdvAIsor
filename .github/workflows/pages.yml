@@ -1,0 +1,92 @@
+name: Pages
+
+# Fetches price data and publishes the site to the gh-pages branch (GitHub Pages).
+# Data parts refresh at different rates (times in UTC; add 2 h for Swedish summer time):
+#   intra  every 5 min on weekdays 06:00–20:55   (08:00–22:55 CEST)
+#   hour   at :01 and :31 in the same window
+#   daily  15:50 and 20:35 (after the Stockholm and US closes) and on every push/manual run
+# Scheduled runs can start several minutes late when GitHub is busy.
+
+on:
+  push:
+    paths:
+      - "mockup/**"
+      - "pipeline/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+    inputs:
+      parts:
+        description: "Delar att hämta (intra,hour,daily)"
+        default: "intra,hour,daily"
+  schedule:
+    - cron: "*/5 6-20 * * 1-5"
+    - cron: "1,31 6-20 * * 1-5"
+    - cron: "50 15 * * 1-5"
+    - cron: "35 20 * * 1-5"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Choose data parts
+        id: parts
+        run: |
+          case "${{ github.event_name }}/${{ github.event.schedule }}" in
+            "schedule/*/5 6-20 * * 1-5") p="intra" ;;
+            "schedule/1,31 6-20 * * 1-5") p="intra,hour" ;;
+            schedule/*) p="intra,hour,daily" ;;
+            workflow_dispatch/*) p="${{ github.event.inputs.parts }}" ;;
+            *) p="intra,hour,daily" ;;
+          esac
+          echo "parts=$p" >> "$GITHUB_OUTPUT"
+          echo "Delar: $p"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pipeline/requirements.txt
+      - run: pip install -r pipeline/requirements.txt
+
+      - name: Tests
+        if: github.event_name != 'schedule'
+        run: python -m unittest discover -s tests -t .
+
+      - name: Keep data parts from the previous deploy
+        run: |
+          mkdir -p site/data
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null; then
+            git fetch --depth=1 origin gh-pages
+            git archive FETCH_HEAD data | tar -x -C site || true
+          fi
+
+      - name: Fetch prices
+        run: python pipeline/fetch_market_data.py --out-dir site/data --parts "${{ steps.parts.outputs.parts }}"
+
+      - name: Build page
+        run: python pipeline/build_site.py --src mockup/index.html --out site/index.html
+
+      - name: Publish to gh-pages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd site
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Publish site ($(date -u +%Y-%m-%dT%H:%MZ), ${{ steps.parts.outputs.parts }})"
+          # a single-commit branch: history does not grow with every 5-minute update
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+          ls -la data

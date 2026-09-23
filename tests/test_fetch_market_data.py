@@ -47,14 +47,22 @@ class FakeYF:
 
 
 class Build(unittest.TestCase):
-    def test_build_with_fake_source(self):
+    def test_build_all_parts_with_fake_source(self):
         data = build(FakeYF)
-        self.assertEqual(set(data["symbols"]), set(SYMBOLS))
-        volvo = data["symbols"]["VOLV-B"]
+        self.assertEqual(set(data), {"intra", "hour", "daily"})
+        intra = data["intra"]
+        self.assertEqual(set(intra["symbols"]), set(SYMBOLS))
+        volvo = intra["symbols"]["VOLV-B"]
         self.assertEqual(volvo["series"]["intra"]["interval"], "5m")
-        self.assertEqual(data["symbols"]["NVDA"]["series"]["intra"]["interval"], "1m")
+        self.assertEqual(intra["symbols"]["NVDA"]["series"]["intra"]["interval"], "1m")
         self.assertIn("last", volvo)
-        self.assertIn("OMXS30", data["indices"])
+        self.assertIn("prevClose", volvo)
+        self.assertIn("OMXS30", intra["indices"])
+        self.assertEqual(set(data["daily"]["symbols"]["VOLV-B"]["series"]), {"day", "week"})
+        self.assertEqual(set(data["hour"]["symbols"]["VOLV-B"]["series"]), {"hour"})
+
+    def test_single_part(self):
+        self.assertEqual(set(build(FakeYF, ["hour"])), {"hour"})
 
 
 if __name__ == "__main__":
