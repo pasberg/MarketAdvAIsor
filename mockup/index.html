@@ -2,6 +2,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.2.1/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 :root{
   --bg:#EBEFED; --surface:#FFFFFF; --surface-2:#F4F7F5; --ink:#13201C; --muted:#5A6863; --faint:#8A9793;
@@ -9,6 +10,7 @@
   --accent:#2447C9; --accent-soft:rgba(36,71,201,.10); --accent-ink:#FFFFFF;
   --up:#0B8457; --up-soft:rgba(11,132,87,.12); --down:#C23B2E; --down-soft:rgba(194,59,46,.11);
   --warn:#A8690F; --warn-soft:rgba(168,105,15,.13); --fib:#9A7415;
+  --ema20:#0E8CA6; --ema50:#8448C4; --vwap:#C0508A;
   --shadow:0 1px 2px rgba(19,32,28,.06),0 6px 24px -12px rgba(19,32,28,.18);
   --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
   --body:"Instrument Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -22,6 +24,7 @@
     --accent:#8EA6FF; --accent-soft:rgba(142,166,255,.14); --accent-ink:#0C1211;
     --up:#3CCB8D; --up-soft:rgba(60,203,141,.14); --down:#FF7A6B; --down-soft:rgba(255,122,107,.13);
     --warn:#E3A64B; --warn-soft:rgba(227,166,75,.14); --fib:#D2B25A;
+    --ema20:#55C6DC; --ema50:#B98CF0; --vwap:#F08CBB;
     --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -14px rgba(0,0,0,.6);
   }
 }
@@ -32,6 +35,7 @@
   --accent:#8EA6FF; --accent-soft:rgba(142,166,255,.14); --accent-ink:#0C1211;
   --up:#3CCB8D; --up-soft:rgba(60,203,141,.14); --down:#FF7A6B; --down-soft:rgba(255,122,107,.13);
   --warn:#E3A64B; --warn-soft:rgba(227,166,75,.14); --fib:#D2B25A;
+  --ema20:#55C6DC; --ema50:#B98CF0; --vwap:#F08CBB;
   --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -14px rgba(0,0,0,.6);
 }
 *{box-sizing:border-box}
@@ -39,10 +43,9 @@ body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14p
 .wrap{max-width:1360px;margin:0 auto;padding-inline:20px;padding-block:0 48px}
 .num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 a{color:var(--accent)}
-button{font:inherit;color:inherit}
+button,select{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
 
-/* top bar */
 .top{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 .top-in{max-width:1360px;margin:0 auto;padding-inline:20px;height:56px;display:flex;align-items:center;gap:20px}
 .brand{font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:-.02em;display:flex;align-items:center;gap:9px}
@@ -56,7 +59,6 @@ button{font:inherit;color:inherit}
 .live{display:inline-flex;align-items:center;gap:6px}
 .live i{width:7px;height:7px;border-radius:50%;background:var(--up);box-shadow:0 0 0 3px var(--up-soft)}
 
-/* index strip */
 .strip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:20px}
 .idx{background:var(--surface);padding:10px 12px;display:grid;grid-template-columns:1fr auto;gap:0 8px;align-items:end}
 .idx .n{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;grid-column:1/-1}
@@ -65,11 +67,10 @@ button{font:inherit;color:inherit}
 .idx svg{grid-column:1/-1;width:100%;height:22px;margin-top:4px}
 .pos{color:var(--up)} .neg{color:var(--down)}
 
-/* hero / horizon */
-.head{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:16px;margin-top:28px}
+.head{margin-top:28px}
 .head h1{font-family:var(--display);font-weight:700;font-size:clamp(26px,3.4vw,38px);letter-spacing:-.03em;line-height:1.05;margin:0;text-wrap:balance}
-.head p{margin:6px 0 0;color:var(--muted);max-width:62ch}
-.hz{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:18px;padding:6px;background:var(--surface);border:1px solid var(--line);border-radius:14px}
+.head p{margin:6px 0 0;color:var(--muted);max-width:74ch}
+.hz{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-top:18px;padding:6px;background:var(--surface);border:1px solid var(--line);border-radius:14px}
 .hz button{border:0;background:transparent;border-radius:10px;padding:10px 12px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:1px;transition:background .15s}
 .hz button:hover{background:var(--surface-2)}
 .hz button .t{font-family:var(--display);font-weight:700;font-size:17px;letter-spacing:-.01em}
@@ -83,11 +84,10 @@ button{font:inherit;color:inherit}
 .regime{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--muted)}
 .regime b{color:var(--ink);font-weight:600}
 
-/* layout */
 .layout{display:grid;grid-template-columns:minmax(290px,350px) minmax(0,1fr);gap:20px;margin-top:20px;align-items:start}
-.sec-t{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 10px;display:flex;justify-content:space-between;align-items:baseline}
+.sec-t{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 10px;display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 .picks{display:flex;flex-direction:column;gap:8px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 72px)}
-.pick{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:4px 10px;align-items:center;text-align:left;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px 12px 10px;cursor:pointer;transition:border-color .15s,transform .15s}
+.pick{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:4px 10px;align-items:center;text-align:left;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px 12px 10px;cursor:pointer;transition:border-color .15s}
 .pick:hover{border-color:var(--faint)}
 .pick[aria-current="true"]{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .rank{font-family:var(--display);font-weight:700;font-size:22px;color:var(--faint);text-align:center;grid-row:1/3}
@@ -95,16 +95,16 @@ button{font:inherit;color:inherit}
 .pk-t{display:flex;align-items:center;gap:8px;min-width:0}
 .pk-t .sym{font-family:var(--mono);font-weight:500;font-size:14px}
 .pk-t .nm{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pk-b{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);grid-column:2}
+.pk-b{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:12px;color:var(--muted);grid-column:2}
 .pk-r{grid-row:1/3;grid-column:3;display:flex;flex-direction:column;align-items:end;gap:2px}
 .pk-r svg{width:74px;height:24px}
 .score-sm{font-family:var(--mono);font-weight:500;font-size:13px}
 .dir{font-size:10.5px;font-weight:600;letter-spacing:.07em;padding:2px 6px;border-radius:5px}
 .dir.L{background:var(--up-soft);color:var(--up)} .dir.S{background:var(--down-soft);color:var(--down)}
 .mkt{font-size:11px;color:var(--muted)}
+.exit{font-family:var(--mono);font-size:11px;color:var(--warn)}
 .empty{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:18px;color:var(--muted)}
 
-/* detail */
 .detail{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
 .d-head{display:flex;flex-wrap:wrap;gap:16px 24px;align-items:center;justify-content:space-between;padding:20px 22px 16px;border-bottom:1px solid var(--line-2)}
 .d-id{display:flex;flex-direction:column;gap:4px;min-width:0}
@@ -116,46 +116,34 @@ button{font:inherit;color:inherit}
 .setup{font-size:13px;color:var(--muted)}
 .setup b{color:var(--ink);font-weight:600}
 .watchflag{font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;padding:2px 7px;border-radius:5px;background:var(--warn-soft);color:var(--warn)}
-.d-kpis{display:flex;gap:22px;align-items:center}
+.d-kpis{display:flex;flex-wrap:wrap;gap:22px;align-items:center}
 .kpi{display:flex;flex-direction:column;gap:2px}
 .kpi .l{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
 .kpi .v{font-family:var(--mono);font-size:18px;font-weight:500}
+.kpi .v.sm{font-size:15px}
+.kpi.exit-k .v{color:var(--warn)}
 .ring{position:relative;width:58px;height:58px}
 .ring svg{width:58px;height:58px;transform:rotate(-90deg)}
 .ring span{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--mono);font-weight:500;font-size:17px}
 
+.intraday-note{margin:14px 18px 0;display:flex;gap:10px;align-items:flex-start;font-size:13px;background:var(--warn-soft);border-radius:10px;padding:10px 12px}
+.intraday-note b{color:var(--warn);white-space:nowrap}
+
 .chart-box{padding:14px 18px 6px}
-.chart-tools{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;margin-bottom:6px}
+.chart-tools{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;margin-bottom:8px}
 .toggles{display:flex;flex-wrap:wrap;gap:6px}
 .tg{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;border:1px solid var(--line);border-radius:7px;padding:4px 9px;cursor:pointer;user-select:none;background:var(--surface)}
 .tg input{accent-color:var(--accent);margin:0}
+.tg i{width:10px;height:3px;border-radius:2px}
 .tf{font-size:12px;color:var(--muted)}
-.chart{width:100%;overflow-x:auto}
-.chart svg{display:block;width:100%;min-width:560px;height:auto}
-.c-up{fill:var(--up);stroke:var(--up)} .c-dn{fill:var(--down);stroke:var(--down)}
-.grid-l{stroke:var(--line-2);stroke-width:1}
-.ax-t{fill:var(--faint);font:10px var(--mono)}
-.fib-l{stroke:var(--fib);stroke-width:1;stroke-dasharray:2 3;opacity:.75}
-.fib-t{fill:var(--fib);font:500 9.5px var(--mono)}
-.zone{fill:var(--accent-soft)}
-.lv-e{stroke:var(--accent);stroke-width:1.25}
-.lv-sl{stroke:var(--down);stroke-width:1.25;stroke-dasharray:5 3}
-.lv-tp{stroke:var(--up);stroke-width:1.25;stroke-dasharray:5 3}
-.tag-e{fill:var(--accent)} .tag-sl{fill:var(--down)} .tag-tp{fill:var(--up)}
-.tag-t{fill:var(--accent-ink);font:500 10px var(--mono)}
-:root .tag-t{fill:#fff}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .tag-t{fill:#0C1211}}
-:root[data-theme="dark"] .tag-t{fill:#0C1211}
-.lv-name{font:600 9.5px var(--body);letter-spacing:.06em}
-.ew-c{fill:var(--surface);stroke:var(--ink);stroke-width:1.2}
-.ew-t{fill:var(--ink);font:600 10px var(--body)}
-.ew-p{stroke:var(--ink);stroke-width:1.4;stroke-dasharray:4 4;fill:none;opacity:.6}
-.now-l{stroke:var(--faint);stroke-dasharray:1 3}
-.proj-bg{fill:var(--surface-2)}
-.rsi-l{fill:none;stroke:var(--accent);stroke-width:1.4}
-.rsi-b{stroke:var(--line);stroke-dasharray:3 3}
-.chart-foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 16px;font-size:12px;color:var(--muted);padding:6px 0 10px}
-.mw{display:inline-flex;align-items:center;gap:5px;font-weight:600;text-decoration:none}
+.chart-wrap{position:relative;height:460px;border:1px solid var(--line-2);border-radius:10px;overflow:hidden}
+#chart{position:absolute;inset:0}
+.legend{position:absolute;left:10px;top:8px;z-index:3;pointer-events:none;font:11px var(--mono);color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 12px;max-width:calc(100% - 90px)}
+.legend b{color:var(--ink);font-weight:500}
+.chart-err{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);text-align:center;padding:20px}
+.chart-foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 16px;font-size:12px;color:var(--muted);padding:8px 0 10px}
+.links{display:flex;flex-wrap:wrap;gap:14px}
+.mw{font-weight:600;text-decoration:none}
 .mw:hover{text-decoration:underline}
 
 .d-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);border-top:1px solid var(--line-2)}
@@ -179,7 +167,7 @@ button{font:inherit;color:inherit}
 .stat .l{font-size:11px;color:var(--muted)}
 .stat .v{font-family:var(--mono);font-size:15px;font-weight:500}
 
-.sig{display:flex;flex-direction:column;gap:11px}
+.sig{display:flex;flex-direction:column;gap:12px}
 .sg-h{display:grid;grid-template-columns:minmax(0,1fr) 36px;gap:10px;align-items:center}
 .sg-n{display:flex;justify-content:space-between;font-size:13px;font-weight:600}
 .sg-n em{font-style:normal;font-weight:400;color:var(--faint);font-size:11.5px;font-family:var(--mono)}
@@ -187,8 +175,10 @@ button{font:inherit;color:inherit}
 .sg-bar i{display:block;height:100%;border-radius:3px}
 .sg-v{font-family:var(--mono);font-size:14px;text-align:right;font-weight:500}
 .sg-c{font-size:12.5px;color:var(--muted);margin-top:3px}
+.sg-i{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.sg-i span{font:10.5px var(--mono);color:var(--muted);background:var(--surface-2);border:1px solid var(--line-2);border-radius:4px;padding:1px 6px}
 
-.d-foot{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);border-top:1px solid var(--line-2)}
+.d-foot{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);border-top:1px solid var(--line-2)}
 .d-foot>section{padding:18px 22px}
 .d-foot>section+section{border-left:1px solid var(--line-2);background:var(--surface-2)}
 .thesis{font-size:15px;line-height:1.6;max-width:66ch;margin:0}
@@ -197,15 +187,25 @@ button{font:inherit;color:inherit}
 .risk{margin-top:14px;display:grid;grid-template-columns:auto 1fr;gap:10px;font-size:13px;background:var(--down-soft);border-radius:10px;padding:10px 12px}
 .risk b{color:var(--down)}
 .inval{margin-top:8px;font-size:13px;color:var(--muted)}
+.instr{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
+.ins{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.ins.avoid{background:transparent;border-style:dashed}
+.ins-h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ins-h b{font-size:13.5px}
+.ins-tag{font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:5px}
+.ins-tag.rec{background:var(--up-soft);color:var(--up)} .ins-tag.alt{background:var(--accent-soft);color:var(--accent)} .ins-tag.no{background:var(--down-soft);color:var(--down)}
+.ins p{margin:4px 0 0;font-size:12.5px;color:var(--muted)}
+.ins-m{display:flex;gap:14px;margin-top:6px;font-size:12px}
 .calc{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .calc label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:500}
-.calc input{font:500 14px var(--mono);padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);width:100%}
+.calc label.full{grid-column:1/-1}
+.calc input,.calc select{font:500 14px var(--mono);padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);width:100%}
+.calc select{font-family:var(--body)}
 .calc-out{margin-top:12px;display:grid;gap:6px;font-size:13px}
 .calc-out div{display:flex;justify-content:space-between;gap:12px}
 .calc-out .num{font-weight:500}
 .note{font-size:11.5px;color:var(--faint);margin-top:10px}
 
-/* watchlist */
 .watch{margin-top:28px}
 .tbl-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px}
 table.wl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
@@ -222,25 +222,39 @@ table.wl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
 .st.build{background:var(--warn-soft);color:var(--warn)}
 .wl .nt{color:var(--muted);max-width:36ch}
 
-.method{margin-top:28px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;font-size:13px;color:var(--muted)}
-.method h3{font-family:var(--display);font-size:16px;color:var(--ink);margin:0 0 4px;letter-spacing:-.01em}
-.method p{margin:0}
+.method{margin-top:32px}
+.m-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.m-card{background:var(--surface);padding:16px 18px}
+.m-card h3{font-family:var(--display);font-size:16px;margin:0 0 2px;letter-spacing:-.01em}
+.m-card .q{font-size:12.5px;color:var(--muted);margin:0 0 8px}
+.m-card ul{margin:0;padding-left:16px;font-size:13px;display:grid;gap:2px}
+.m-card li::marker{color:var(--faint)}
+.m-card .src{margin-top:8px;font-size:11.5px;color:var(--faint)}
+.wt{margin-top:14px;overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px}
+.wt table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:620px}
+.wt th,.wt td{padding:8px 12px;border-bottom:1px solid var(--line-2);text-align:right}
+.wt th:first-child,.wt td:first-child{text-align:left}
+.wt th{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+.wt tr:last-child td{border-bottom:0}
+.wt td.hi{font-weight:600;color:var(--accent)}
 .disc{margin-top:24px;padding-top:16px;border-top:1px solid var(--line);font-size:12px;color:var(--faint)}
 
 @media (max-width:1100px){
   .layout{grid-template-columns:1fr}
   .picks{position:static}
   .strip{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .m-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media (max-width:760px){
   .wrap,.top-in{padding-inline:16px}
   .nav{display:none}
   .strip{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .hz{grid-template-columns:repeat(5,minmax(96px,1fr));overflow-x:auto}
+  .hz{grid-template-columns:repeat(6,minmax(96px,1fr));overflow-x:auto}
   .d-grid,.d-foot{grid-template-columns:1fr}
   .d-grid>section+section,.d-foot>section+section{border-left:0;border-top:1px solid var(--line-2)}
-  .method{grid-template-columns:1fr}
+  .m-grid{grid-template-columns:1fr}
   .d-kpis{gap:14px}
+  .chart-wrap{height:400px}
   .top-meta .live{display:none}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -258,7 +272,7 @@ table.wl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
       <a href="#metod">Metod</a>
     </nav>
     <div class="top-meta">
-      <span class="live"><i></i>Uppdaterad 23 sep 2026 · 14:32 CET</span>
+      <span class="live"><i></i>Uppdaterad ons 23 sep 2026 · 15:50 CET</span>
       <span class="badge-demo">Mockup · exempeldata</span>
     </div>
   </div>
@@ -268,10 +282,8 @@ table.wl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
   <div class="strip" id="strip" aria-label="Index"></div>
 
   <div class="head">
-    <div>
-      <h1 id="h1">Top picks · Vecka</h1>
-      <p id="hsub">Konfluens mellan teknisk analys, fundamenta, Elliott Wave, momentum och Fibonacci — rangordnat efter viktad poäng.</p>
-    </div>
+    <h1 id="h1">Top picks · Vecka</h1>
+    <p id="hsub"></p>
   </div>
 
   <div class="hz" role="tablist" aria-label="Tidshorisont" id="hz"></div>
@@ -300,33 +312,46 @@ table.wl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
   </section>
 
   <section class="method" id="metod">
-    <div><h3>Viktad konfluens</h3><p>Sex delmodeller ger 0–100 poäng var. Vikterna skiftar med horisonten — intradag domineras av TA och momentum, halvår av fundamenta.</p></div>
-    <div><h3>Nivåer från struktur</h3><p>Entry sätts vid Fibonacci-retracement av senaste impulsen, SL under Elliott-invalideringen och TP vid tidigare topp samt 127,2 / 161,8 %-extension.</p></div>
-    <div><h3>Graf och data</h3><p>Grafen i mockupen är genererad. I produktion: realtidskurser via dataleverantör och TradingView Lightweight Charts, med länk ut till MarketWatch per instrument.</p></div>
+    <h2 class="sec-t"><span>Vad ingår i analysen</span><span>Sex delmodeller · 0–100 poäng var</span></h2>
+    <div class="m-grid" id="m-grid"></div>
+    <div class="wt" id="wt"></div>
   </section>
 
-  <p class="disc">Mockup med fiktiva kurser och analyser. Inget innehåll utgör investeringsrådgivning. Historisk avkastning är ingen garanti för framtida avkastning.</p>
+  <p class="disc">Mockup med fiktiva kurser och analyser. Inget innehåll utgör investeringsrådgivning. Hävstångsprodukter kan förlora hela sitt värde snabbt. Historisk avkastning är ingen garanti för framtida avkastning. Grafer: TradingView Lightweight Charts™.</p>
 </main>
 
 <script>
 (()=>{
 const HZ = {
-  intradag:{t:'Intradag', tf:'5 min', valid:'Gäller idag', vol:.012, w:[.30,.02,.13,.30,.15,.10],
-    regime:[['Bias','Riskaptit'],['Bredd','58 % stigande'],['VIX','15,8'],['Fokus','Halvledare, banker']]},
-  vecka:{t:'Vecka', tf:'1 timme', valid:'Vecka 39', vol:.04, w:[.28,.07,.18,.22,.15,.10],
+  intradag:{t:'Intradag', kind:'intra', valid:'Stängs samma dag', vol:.012, n:64, fwd:14, w:[.30,.02,.13,.30,.15,.10],
+    sub:'Positioner som öppnas och stängs samma handelsdag — inget hålls över natten. Kort rörelse, snäva stopp: här gör bull/bear-certifikat och mini futures nytta.',
+    regime:[['Norden','Öppen · stänger 17:30'],['USA','Öppnade 15:30'],['VIX','15,8'],['Fokus','Halvledare, banker']]},
+  vecka:{t:'Vecka', kind:'hour', valid:'Vecka 39', vol:.04, n:90, fwd:16, w:[.28,.07,.18,.22,.15,.10],
+    sub:'Swing-affärer som hålls några dagar upp till en vecka. Timgraf för timing, dagsgraf för riktning.',
     regime:[['Trend','Upp'],['Bredd','62 % över MA50'],['Volatilitet','Låg'],['Taktik','Köp rekyler']]},
-  manad:{t:'Månad', tf:'1 dag', valid:'Oktober 2026', vol:.09, w:[.24,.16,.20,.16,.14,.10],
+  manad:{t:'Månad', kind:'day', valid:'Oktober 2026', vol:.09, n:90, fwd:16, w:[.24,.16,.20,.16,.14,.10],
+    sub:'Positioner över rapportsäsongen. Dagsgraf; fundamenta börjar väga in.',
     regime:[['Trend','Upp, mognande'],['Rapportsäsong','Startar v. 42'],['Säsong','Oktober historiskt volatil']]},
-  kvartal:{t:'Kvartal', tf:'1 dag', valid:'Q4 2026', vol:.16, w:[.18,.30,.18,.12,.12,.10],
+  kvartal:{t:'Kvartal', kind:'day', valid:'Q4 2026', vol:.16, n:120, fwd:20, w:[.18,.30,.18,.12,.12,.10],
+    sub:'Trendpositioner för kvartalet. Dagsgraf med veckografen som filter.',
     regime:[['Cykel','Sen expansion'],['Räntor','Sänkningar prisade'],['Rotation','Mot industri & kvalitet']]},
-  halvar:{t:'Halvår', tf:'1 vecka', valid:'Till mars 2027', vol:.26, w:[.14,.38,.18,.10,.10,.10],
-    regime:[['Makro','Mjuklandning'],['Värdering','S&P P/E 22,4'],['Tema','AI-infrastruktur, elektrifiering']]}
+  halvar:{t:'Halvår', kind:'week', valid:'Till mars 2027', vol:.26, n:80, fwd:12, w:[.14,.38,.18,.10,.10,.10],
+    sub:'Investeringscase på sex månader. Veckograf; fundamenta väger tyngst.',
+    regime:[['Makro','Mjuklandning'],['Värdering','S&P P/E 22,4'],['Tema','AI-infrastruktur, elektrifiering']]},
+  ar:{t:'År', kind:'week', valid:'Till sep 2027', vol:.40, n:110, fwd:16, w:[.12,.42,.18,.08,.10,.10],
+    sub:'Tolvmånaderscase: strukturell tillväxt och värdering först, tekniken avgör bara ingångspunkten.',
+    regime:[['Cykel','Sen expansion → avmattning'],['Vinsttillväxt','+11 % väntat 2027'],['Tema','Elektrifiering, hälsa, AI']]}
 };
-const HZ_ORDER=['intradag','vecka','manad','kvartal','halvar'];
-const SIG = ['Teknisk analys','Fundamental','Elliott Wave','Momentum','Fibonacci','Sentiment & flöde'];
+const HZ_ORDER=['intradag','vecka','manad','kvartal','halvar','ar'];
+const SIG=['Teknisk analys','Fundamental','Elliott Wave','Momentum','Fibonacci','Sentiment & flöde'];
+const SIG_KEY=['TA','FA','EW','MOM','FIB','SENT'];
 
+// exchange: session in minutes CET [open, close]; US intraday includes pre-market
+const EX={Nasdaq:{o:930,c:1320,tv:'NASDAQ',us:1},NYSE:{o:930,c:1320,tv:'NYSE',us:1},Stockholm:{o:540,c:1050,tv:'OMXSTO'},
+  'Köpenhamn':{o:540,c:1020,tv:'OMXCOP'},Oslo:{o:540,c:980,tv:'OSL'},Helsingfors:{o:540,c:1050,tv:'OMXHEX'}};
+const NOW_MIN=950; // 15:50 CET
 // sym: [name, exchange, currency, price, dayChg%, tags, marketwatch path, country]
-const T = {
+const T={
   NVDA:['NVIDIA','Nasdaq','USD',186.40,1.2,'ndx spx','nvda'], MSFT:['Microsoft','Nasdaq','USD',512.40,.4,'ndx spx','msft'],
   AAPL:['Apple','Nasdaq','USD',238.90,-.3,'ndx spx','aapl'], AMZN:['Amazon','Nasdaq','USD',231.40,.8,'ndx spx','amzn'],
   META:['Meta Platforms','Nasdaq','USD',742.00,1.1,'ndx spx','meta'], AVGO:['Broadcom','Nasdaq','USD',348.60,2.1,'ndx spx','avgo'],
@@ -341,7 +366,7 @@ const T = {
   'INVE-B':['Investor B','Stockholm','SEK',298.50,.5,'nord','inve.b','se'], 'SEB-A':['SEB A','Stockholm','SEK',188.20,.3,'nord','seb.a','se'],
   'ASSA-B':['Assa Abloy B','Stockholm','SEK',372.00,.6,'nord','assa.b','se'], SAND:['Sandvik','Stockholm','SEK',262.00,1.1,'nord','sand','se'],
   'HM-B':['H&M B','Stockholm','SEK',148.90,-.9,'nord','hm.b','se'], EVO:['Evolution','Stockholm','SEK',812.00,-1.2,'nord','evo','se'],
-  ABB:['ABB','Stockholm','SEK',612.00,.8,'nord','abb','se'], 'NDA-SE':['Nordea','Stockholm','SEK',142.60,.4,'nord','nda.se','se'],
+  ABB:['ABB','Stockholm','SEK',612.00,.8,'nord','abb','se'], 'NDA-SE':['Nordea','Stockholm','SEK',142.60,-.4,'nord','nda.se','se'],
   'NOVO-B':['Novo Nordisk B','Köpenhamn','DKK',342.50,1.4,'nord','novo.b','dk'], DSV:['DSV','Köpenhamn','DKK',1520.00,.4,'nord','dsv','dk'],
   VWS:['Vestas Wind','Köpenhamn','DKK',132.60,-.7,'nord','vws','dk'],
   EQNR:['Equinor','Oslo','NOK',248.60,-1.1,'nord','eqnr','no'], MOWI:['Mowi','Oslo','NOK',196.40,.2,'nord','mowi','no'],
@@ -350,20 +375,20 @@ const T = {
 };
 const FX={SEK:1,USD:9.40,DKK:1.47,NOK:.93,EUR:11.0};
 
-// top: [sym, dir, retracement, setup, thesis, scores[6], risk]
-// watch: [sym, dir, retracement, setup, note, scores[6], status]
-const D = {
+// top: [sym, dir, retracement, setup, thesis, scores[TA,FA,EW,MOM,FIB,SENT], risk]
+// watch: [sym, dir, retracement, setup, note, scores, status]
+const D={
 intradag:{top:[
- ['NVDA','L',.5,'ORB-utbrott · VWAP-rekyl','Öppningsintervallet bröts uppåt på 1,8× normal volym. Rekylen landar nu i VWAP, som sammanfaller med 50 %-retracement av morgonens impuls — en klassisk andra-chans-entry med halvledarsektorn som medvind.',[84,60,74,86,80,78],'Makrodata kl. 16:00 kan vända hela sektorn. Stäng positionen före börsens stängning.'],
- ['VOLV-B','L',.382,'Gap-and-go','Gap upp efter stark orderingång i Nordamerika. Första rekylen håller ovanför gårdagens högsta och 38,2 %-nivån — köparna försvarar gapet.',[82,70,72,80,78,74],'Gapet kan fyllas om OMXS30 tappar 2 690.'],
- ['TSLA','S',.618,'Misslyckat utbrott','Försöket över förmiddagens högsta misslyckades på fallande volym och RSI visar bearish divergens på 5 min. Priset är tillbaka under VWAP; rekylen upp mot 61,8 % är ett säljläge.',[78,45,70,82,76,72],'Hög blankningsgrad ger risk för snabba squeezar. Håll stoppen strikt.'],
- ['NOVO-B','L',.5,'Reversal vid pivot S1','Efter tre dagars nedgång bildas en hammare på 15 min exakt vid dagens pivot S1. Relativ styrka mot OMXC25 vänder upp och säljvolymen torkar ut.',[76,62,68,78,82,70],'Nyhetsflöde kring läkemedelspriser i USA kan ge gap-risk.'],
- ['JPM','L',.382,'Bull flag över VWAP','Bankerna leder efter räntedata. Flaggformation på 5 min ovanför VWAP; utbrott ur flaggan ger mål i nivå med dagens förväntade range.',[80,66,64,76,72,70],'Svag kreditdata från regionbanker kan dra ned sektorn.']],
+ ['NVDA','L',.5,'ORB-utbrott · VWAP-rekyl','Öppningsintervallet 15:30–15:35 bröts uppåt på 1,8× normal volym. Rekylen landar nu i VWAP, som sammanfaller med 50 %-retracement av öppningsimpulsen — en andra-chans-entry med halvledarsektorn som medvind.',[84,60,74,86,80,78],'Makrodata kl. 16:00 kan vända hela sektorn. Positionen stängs senast 21:55 oavsett utfall.'],
+ ['VOLV-B','L',.382,'Gap-and-go','Gap upp efter stark orderingång i Nordamerika. Rekylerna under dagen har hållit ovanför gårdagens högsta och 38,2 %-nivån — köparna försvarar gapet inför den amerikanska öppningen.',[82,70,72,80,78,74],'Gapet kan fyllas om OMXS30 tappar 2 690. Stäng senast 17:25.'],
+ ['TSLA','S',.618,'Misslyckat utbrott','Försöket över förmarknadens högsta misslyckades direkt efter öppning på fallande volym, och RSI visar bearish divergens på 1 min. Priset är under VWAP; rekylen upp mot 61,8 % är ett säljläge.',[78,45,70,82,76,72],'Hög blankningsgrad ger risk för snabba squeezar. Håll stoppen strikt.'],
+ ['NOVO-B','L',.5,'Reversal vid pivot S1','Efter tre dagars nedgång bildades en hammare på 15 min exakt vid dagens pivot S1. Relativ styrka mot OMXC25 vänder upp och säljvolymen torkar ut.',[76,62,68,78,82,70],'Köpenhamn stänger redan 17:00 — kort tidsfönster. Nyheter om läkemedelspriser i USA kan ge snabba ras.'],
+ ['JPM','L',.382,'Bull flag över VWAP','Bankerna leder efter räntedata kl. 14:30. Flaggformation på 1 min ovanför VWAP; utbrott ur flaggan ger mål i nivå med dagens förväntade range.',[80,66,64,76,72,70],'Svag kreditdata från regionbanker kan dra ned sektorn.']],
  watch:[
- ['AMD','L',.5,'Triangel på 15 min','Trigger vid stängning över triangelns överkant med volym.',[72,55,62,74,66,64],'near'],
+ ['AMD','L',.5,'Triangel från förmarknaden','Trigger vid 1-minutsstängning över triangelns överkant med volym.',[72,55,62,74,66,64],'near'],
  ['ERIC-B','S',.382,'Lägre topp','Säljläge om motståndet vid förmiddagens topp håller.',[66,48,60,64,62,58],'wait'],
- ['EQNR','S',.5,'Följer oljan','Brent under 70 USD — trigger vid brott av morgonens botten.',[64,52,58,70,60,56],'near'],
- ['AAPL','L',.618,'Range-botten','Handlas i dagens range; köp först vid återtag av VWAP.',[60,64,56,58,64,60],'wait'],
+ ['NDA-SE','S',.5,'Svag relativ styrka','Nordiska banker släpar — trigger vid brott av dagens botten.',[64,52,58,70,60,56],'near'],
+ ['AAPL','L',.618,'Range-botten','Handlas i förmarknadens range; köp först vid återtag av VWAP.',[60,64,56,58,64,60],'wait'],
  ['SAAB-B','L',.382,'Momentumfortsättning','Stark trend men RSI 76 — vänta på en andningspaus.',[74,68,66,62,60,70],'build'],
  ['META','L',.5,'Inside day','Utbrott ur gårdagens range är trigger.',[68,70,60,66,62,64],'wait']]},
 vecka:{top:[
@@ -417,11 +442,33 @@ halvar:{top:[
  ['HM-B','S',.5,'Strukturell press','Marginalpress — säljläge vid rekyl.',[64,54,62,60,62,54],'wait'],
  ['TSLA','S',.382,'Värderingsrisk','Robotaxi-förväntningarna är redan prisade.',[62,44,66,60,62,64],'wait'],
  ['KNEBV','L',.5,'Kinaåterhämtning','Case om Kinas fastighetsmarknad stabiliseras.',[58,72,58,58,62,56],'build'],
- ['NFLX','L',.382,'Trend','Annonsnivån växer — trigger vid nytt högsta.',[72,80,66,70,64,68],'near']]}
+ ['NFLX','L',.382,'Trend','Annonsnivån växer — trigger vid nytt högsta.',[72,80,66,70,64,68],'near']]},
+ar:{top:[
+ ['GOOGL','L',.5,'Omvärdering','Lägst värderade megabolaget trots växande moln- och AI-intäkter. Veckografen bröt ut ur en tvåårig range; rekylen mot 50 % ger årsmålet vid 161,8 %-extensionen.',[80,90,78,72,76,72],'Antitrustprocesser och AI-konkurrens inom sök.'],
+ ['ABB','L',.382,'Sekulär trend','Elektrifiering, datacenter och automation ger en flerårig ordercykel. Veckografen visar en ren upptrend; rekylen till 38,2 % och 52-veckors medelvärde har varit köpläge tre gånger sedan 2020.',[80,86,76,70,74,70],'Värderingen (P/E ≈ 30) lämnar lite utrymme för besvikelser.'],
+ ['LLY','L',.5,'Strukturell tillväxt','GLP-1-marknaden väntas mer än fördubblas till 2030 och Lilly tar marknadsandelar. Veckografens konsolidering har brutits uppåt; 50 % är retest-zonen.',[76,90,72,70,74,72],'Prisregleringar i USA och patentutgångar på sikt.'],
+ ['INVE-B','L',.5,'Compounder','Investor har slagit index med bred marginal över tio år. Substansrabatten ligger över snittet och trenden på veckografen är obruten.',[76,84,70,68,72,66],'Följer den svenska börsen tätt — inget skydd vid bred nedgång.'],
+ ['VWS','L',.618,'Flerårig botten','Orderboken är rekordstor efter år av marginalproblem. Veckografen visar en möjlig a-b-c-botten vid 61,8 % av hela uppgången — asymmetrisk risk/reward.',[66,76,78,62,82,60],'Räntekänsligt; politisk risk kring subventioner i USA.']],
+ watch:[
+ ['AMZN','L',.5,'Flerårig trend','Köp vid rekyl mot 40-veckors medelvärde.',[70,84,66,64,68,66],'wait'],
+ ['SAAB-B','L',.382,'Supercykel försvar','Stark men utsträckt — vänta på konsolidering.',[74,80,68,62,62,70],'build'],
+ ['NESTE','L',.618,'Möjlig botten','Kontrarian — bottenbildning som kräver bekräftelse.',[52,62,64,54,72,50],'build'],
+ ['ASSA-B','L',.382,'Kvalitet','Trigger vid nytt högsta på veckobasis.',[72,82,64,64,64,64],'near'],
+ ['XOM','S',.5,'Oljeöverskott','Blankningscase om oljan faller under 60 USD.',[62,58,62,60,62,58],'wait'],
+ ['DSV','L',.5,'Synergier','Integrationen av Schenker bär vinsttillväxten 2027–28.',[66,80,64,62,68,62],'wait']]}
 };
 const STATUS={near:'Nära trigger',wait:'Väntar på rekyl',build:'Setup byggs'};
 const OFF={near:.05,wait:.16,build:.10};
 const IDX=[['S&P 500',6612.4,.42],['Nasdaq 100',24310.8,.71],['OMXS30',2704.9,.35],['OMXC25',1641.2,-.18],['OBX',1472.6,-.52],['OMXH25',5018.3,.12],['VIX',15.8,-3.1]];
+
+const METHOD=[
+ ['Teknisk analys','Trend, struktur och nivåer',['EMA 20 / 50 / 200 — läge och lutning','Högre/lägre toppar och bottnar','Stöd, motstånd och formationer','Volym och OBV','VWAP (intradag)'],'Kursdata per tidsupplösning'],
+ ['Momentum','Styrka och trötthet i rörelsen',['RSI 14 — nivå och divergenser','MACD (12, 26, 9)','Rate of Change','Relativ styrka mot index'],'Beräknas från samma kursdata'],
+ ['Elliott Wave','Var i cykeln befinner vi oss?',['Vågräkning 1–5 och a-b-c','Invalideringsnivå','Projektion av nästa våg'],'Regelbaserad räkning + granskning'],
+ ['Fibonacci','Var är entry och mål?',['Retracement 23,6–78,6 %','Extension 127,2 / 161,8 %','Kluster med andra nivåer'],'Från senaste impulsens swing'],
+ ['Fundamental','Stöder bolaget rörelsen?',['Vinstrevideringar','P/E och EV/EBIT mot historik och sektor','Marginaltrend och balansräkning','Rapportkalender'],'Konsensus- och bokslutsdata'],
+ ['Sentiment & flöde','Vad gör andra aktörer?',['Optionsflöde (put/call)','Blankning och täckning','Insynshandel','Nyhetsflöde'],'Flödes- och nyhetsdata']
+];
 
 // ---------- utils
 const nf2=new Intl.NumberFormat('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -433,52 +480,81 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 function hash(s){let h=2166136261;for(const c of s){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0}
 function rng(seed){let a=seed>>>0;return()=>{a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 const pctTxt=r=>({.382:'38,2 %',.5:'50 %',.618:'61,8 %'}[r]);
+const hm=min=>String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0');
 const mwUrl=s=>{const t=T[s];return 'https://www.marketwatch.com/investing/stock/'+t[6]+(t[7]?'?countrycode='+t[7]:'')};
+const tvUrl=s=>'https://www.tradingview.com/symbols/'+EX[T[s][1]].tv+'-'+s.replace('-','_')+'/';
+const exitMin=s=>EX[T[s][1]].c-5;
+const leftTxt=min=>{const d=min-NOW_MIN;return d<60?`${d} min kvar`:`${Math.floor(d/60)} h ${d%60} min kvar`};
+const tfLabel=(hz,s)=>{const k=HZ[hz].kind;return k==='intra'?(EX[T[s][1]].us?'1 min':'5 min'):k==='hour'?'1 timme':k==='day'?'1 dag':'1 vecka'};
+const cssVar=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+// ---------- timeline (local CET time encoded as UTC seconds)
+const DAY=86400, TODAY=Date.UTC(2026,8,23)/1000;
+const isWd=t=>{const d=new Date(t*1000).getUTCDay();return d>0&&d<6};
+function timeline(hz,s,N,fwd){
+  const k=HZ[hz].kind,ex=EX[T[s][1]];
+  if(k==='week'){const mon=TODAY-2*DAY;const a=[];for(let i=-(N-1);i<=fwd;i++)a.push(mon+i*7*DAY);return {t:a,fwd}}
+  if(k==='intra'){
+    const st=ex.us?1:5,last=Math.floor(NOW_MIN/st)*st-st,maxF=Math.floor((ex.c-last)/st)-1,f=Math.max(2,Math.min(fwd,maxF));
+    const a=[];for(let i=-(N-1);i<=f;i++)a.push(TODAY+(last+i*st)*60);return {t:a,fwd:f};
+  }
+  const slots=k==='day'?[0]:(ex.us?[930,990,1050,1110,1170,1230,1290]:[540,600,660,720,780,840,900,960,1020]);
+  const back=[];let d=TODAY;
+  while(back.length<N){if(isWd(d)){for(const m of [...slots].reverse()){if(d===TODAY&&k!=='day'&&m>NOW_MIN)continue;back.push(d+m*60);if(back.length>=N)break}}d-=DAY}
+  const ahead=[];d=TODAY;
+  while(ahead.length<fwd){if(isWd(d)){for(const m of slots){const t=d+m*60;if(t>back[0])ahead.push(t);if(ahead.length>=fwd)break}}d+=DAY}
+  return {t:back.reverse().concat(ahead),fwd};
+}
 
 // ---------- analysis model
 const cache={};
+function ema(vals,p){const k=2/(p+1),o=[];vals.forEach((v,i)=>o.push(i?o[i-1]+k*(v-o[i-1]):v));return o}
 function model(item,hz){
   const key=hz+'|'+item.s+'|'+item.kind;
   if(cache[key])return cache[key];
-  const H=HZ[hz],t=T[item.s],s=item.dir==='L'?1:-1,P=t[3],R=P*H.vol;
+  const H=HZ[hz],t=T[item.s],s=item.dir==='L'?1:-1,P=t[3],R=P*H.vol,N=H.n;
   const eU=1-item.ret,w1=eU*.6,w2=w1*.35,slU=eU-.24;
   const curU=eU+(item.status?OFF[item.status]:.015);
   const A=P-s*curU*R,val=u=>A+s*u*R;
   const r=rng(hash(key)),j=()=>(r()-.5)*.05;
-  const piv=[{x:0,u:.3},{x:.1+j(),u:0,l:''},{x:.3+j(),u:w1,l:'1'},{x:.43+j(),u:w2,l:'2'},{x:.78+j(),u:1,l:'3'},{x:1,u:curU,l:'4'}];
-  const N=64,pIdx=piv.map(p=>Math.round(p.x*(N-1)));
+  const piv=[{x:0,u:.3},{x:.12+j(),u:0,l:''},{x:.32+j(),u:w1,l:'1'},{x:.45+j(),u:w2,l:'2'},{x:.8+j(),u:1,l:'3'},{x:1,u:curU,l:'4'}];
+  const pIdx=piv.map(p=>Math.round(p.x*(N-1)));
+  const tl=timeline(hz,item.s,N,H.fwd);
   const c=[];let nz=0,prev=null;
   for(let i=0;i<N;i++){
     const x=i/(N-1);let k=0;while(k<piv.length-2&&x>piv[k+1].x)k++;
     const a=piv[k],b=piv[k+1],f=(x-a.x)/((b.x-a.x)||1),tgt=a.u+(b.u-a.u)*f;
-    const dist=Math.min(...pIdx.map(p=>Math.abs(p-i)));
-    nz=nz*.55+(r()-.5)*.08;
-    const damp=Math.min(1,dist/4);
+    const dist=Math.min(...pIdx.map(p=>Math.abs(p-i))),damp=Math.min(1,dist/4);
+    nz=nz*.55+(r()-.5)*.07;
     const pi=pIdx.indexOf(i);
-    let cl=tgt+nz*damp, op=prev==null?cl-.02:prev+(r()-.5)*.012;
-    let hi=Math.max(op,cl)+r()*.028*Math.max(damp,.3),lo=Math.min(op,cl)-r()*.028*Math.max(damp,.3);
+    let cl=tgt+nz*damp,op=prev==null?cl-.02:prev+(r()-.5)*.01;
+    let hi=Math.max(op,cl)+r()*.025*Math.max(damp,.3),lo=Math.min(op,cl)-r()*.025*Math.max(damp,.3);
     if(pi>0&&pi<piv.length-1){
       const pk=piv[pi].u>=piv[pi-1].u;
       if(pk){hi=piv[pi].u;cl=Math.min(cl,hi-.012);op=Math.min(op,hi-.004);lo=Math.min(lo,cl,op)}
       else{lo=piv[pi].u;cl=Math.max(cl,lo+.012);op=Math.max(op,lo+.004);hi=Math.max(hi,cl,op)}
     }
     if(i===N-1){cl=curU;hi=Math.max(hi,cl);lo=Math.min(lo,cl)}
+    const impulse=(k===1||k===3)?1.5:1;
     prev=cl;
     const o=val(op),C=val(cl),h1=val(hi),l1=val(lo);
-    c.push({o,c:C,h:Math.max(h1,l1),l:Math.min(h1,l1)});
+    c.push({time:tl.t[i],open:o,close:C,high:Math.max(h1,l1),low:Math.min(h1,l1),vol:Math.round((.6+r()*.8)*impulse*1e5)});
   }
-  // RSI 14
+  const closes=c.map(x=>x.close);
+  const e20=ema(closes,20),e50=ema(closes,50);
+  let pv=0,vv=0;const vwap=c.map(x=>{const tp=(x.high+x.low+x.close)/3;pv+=tp*x.vol;vv+=x.vol;return pv/vv});
   const rsi=[];let ag=0,al=0;
-  for(let i=1;i<N;i++){const d=c[i].c-c[i-1].c,g=Math.max(d,0),l=Math.max(-d,0);
+  for(let i=1;i<N;i++){const d=closes[i]-closes[i-1],g=Math.max(d,0),l=Math.max(-d,0);
     if(i<=14){ag+=g/14;al+=l/14;rsi[i]=i===14?100-100/(1+ag/(al||1e-9)):null}
     else{ag=(ag*13+g)/14;al=(al*13+l)/14;rsi[i]=100-100/(1+ag/(al||1e-9))}}
-  const lv={entry:val(eU),zLo:val(eU-.03),zHi:val(eU+.03),sl:val(slU),tp1:val(1),tp2:val(1.272),tp3:val(1.618),w1:val(w1)};
+  const lv={entry:val(eU),zLo:Math.min(val(eU-.03),val(eU+.03)),zHi:Math.max(val(eU-.03),val(eU+.03)),sl:val(slU),tp1:val(1),tp2:val(1.272),tp3:val(1.618),w1:val(w1)};
   const risk=Math.abs(lv.entry-lv.sl);
   const rr=[lv.tp1,lv.tp2,lv.tp3].map(v=>Math.abs(v-lv.entry)/risk);
-  const W=H.w, score=Math.round(item.sc.reduce((a,v,i)=>a+v*W[i],0));
+  const W=H.w,score=Math.round(item.sc.reduce((a,v,i)=>a+v*W[i],0));
   const prob=Math.max(30,Math.min(78,Math.round(35+(score-50)*.9)));
   const ev=(prob/100)*rr[1]-(1-prob/100);
-  const m={item,t,s,P,R,val,piv,pIdx,c,rsi,lv,rr,score,prob,ev,risk,eU,hz,rsiNow:Math.round(rsi[N-1])};
+  const m={item,t,s,P,R,val,piv,pIdx,c,tl,e20,e50,vwap,rsi,lv,rr,score,prob,ev,risk,eU,hz,N,
+    rsiNow:Math.round(rsi[N-1]),e20Now:e20[N-1],e50Now:e50[N-1],vwapNow:vwap[N-1]};
   cache[key]=m;return m;
 }
 function pool(hz){
@@ -486,28 +562,52 @@ function pool(hz){
   const mk=(a,kind)=>({s:a[0],dir:a[1],ret:a[2],setup:a[3],text:a[4],sc:a[5],risk:kind==='top'?a[6]:null,status:kind==='watch'?a[6]:null,kind});
   return {top:d.top.map(a=>mk(a,'top')),watch:d.watch.map(a=>mk(a,'watch'))};
 }
-function comments(m){
-  const {item,s,lv,t,hz}=m,L=s>0,sc=item.sc,cur=t[2];
-  const lvl=v=>f2(v);
-  return [
-    sc[0]>=75?(L?'Högre toppar och bottnar; pris över stigande EMA 20/50.':'Lägre toppar och bottnar; pris under fallande EMA 20/50.')
-      :sc[0]>=62?'Strukturen är intakt men glidande medelvärden planar ut.':'Blandad bild — trenden är inte bekräftad.',
-    hz==='intradag'?'Låg vikt intradag. Inga rapporter eller bolagshändelser idag.'
-      :sc[1]>=80?(L?'Vinstrevideringar uppåt och P/E under femårssnittet.':'Stark balansräkning, men marginalerna pressas.')
+function signals(m){
+  const {item,s,lv,t,hz,P}=m,L=s>0,sc=item.sc,cur=t[2],intra=hz==='intradag';
+  const rel=(v)=>P>v?'över':'under';
+  const taTxt=`Pris ${rel(m.e20Now)} EMA 20 och ${rel(m.e50Now)} EMA 50${intra?`, ${rel(m.vwapNow)} VWAP`:''}. `+
+    (sc[0]>=75?(L?'Högre toppar och bottnar — rekylen sker inom upptrend.':'Lägre toppar och bottnar — rekylen sker inom nedtrend.'):sc[0]>=62?'Strukturen är intakt men medelvärdena planar ut.':'Blandad bild — trenden är inte bekräftad.');
+  const faTxt=intra?'Låg vikt intradag. Inga rapporter eller bolagshändelser under dagen.'
+      :sc[1]>=80?(L?'Vinstrevideringar uppåt och P/E under femårssnittet.':'Stark balans, men marginalerna pressas.')
       :sc[1]>=65?(L?'Stabil vinsttillväxt; värderingen i linje med sektorn.':'Neutrala revideringar; värderingen ger inget stöd.')
-      :(L?'Svag vinsttrend — caset vilar på tekniken.':'Negativa revideringar och fallande marginaler.'),
-    `Våg 4 pågår. Mål för våg 5: ${lvl(lv.tp2)}–${lvl(lv.tp3)} ${cur}. Ogiltig ${L?'under':'över'} våg 1 (${lvl(lv.w1)}).`,
-    `RSI(14) ${m.rsiNow} · MACD ${sc[3]>=70?(L?'korsar upp':'korsar ned'):'planar ut'} · volym ${sc[3]>=75?'över':'nära'} snittet.`,
-    `Entry vid ${pctTxt(item.ret)}-retracement (${lvl(lv.entry)}). TP2/TP3 vid 127,2 / 161,8 %-extension.`,
-    sc[5]>=74?(L?'Positivt optionsflöde; blankningen minskar.':'Put-flöde ökar; insiders nettosäljare.'):sc[5]>=62?'Neutralt sentiment; inga extrema positioneringar.':'Svagt intresse — låg volym i optioner.'
+      :(L?'Svag vinsttrend — caset vilar på tekniken.':'Negativa revideringar och fallande marginaler.');
+  const macd=sc[3]>=70?(L?'korsar upp':'korsar ned'):'planar ut';
+  return [
+    {txt:taTxt,ind:[`EMA20 ${f2(m.e20Now)}`,`EMA50 ${f2(m.e50Now)}`].concat(intra?[`VWAP ${f2(m.vwapNow)}`]:[]).concat([`Volym ${sc[0]>=75?'↑':'→'}`])},
+    {txt:faTxt,ind:intra?['—']:['Revideringar','P/E vs historik','Marginal']},
+    {txt:`Våg 4 pågår. Mål för våg 5: ${f2(lv.tp2)}–${f2(lv.tp3)} ${cur}. Ogiltig ${L?'under':'över'} våg 1 (${f2(lv.w1)}).`,ind:['Våg 4 av 5',`Inval. ${f2(lv.w1)}`]},
+    {txt:`RSI ${m.rsiNow<35?'nära översålt':m.rsiNow>65?'nära överköpt':'i neutral zon'} efter rekylen; MACD ${macd}. Momentum ${sc[3]>=75?'stöder':'stöder delvis'} riktningen.`,ind:[`RSI14 ${m.rsiNow}`,`MACD ${macd}`,`RS mot index ${sc[3]>=75?'↑':'→'}`]},
+    {txt:`Entry vid ${pctTxt(item.ret)}-retracement. TP2/TP3 vid 127,2 / 161,8 %-extension.`,ind:[`${pctTxt(item.ret)} ${f2(lv.entry)}`,`127,2 % ${f2(lv.tp2)}`]},
+    {txt:sc[5]>=74?(L?'Positivt optionsflöde; blankningen minskar.':'Put-flödet ökar; insiders är nettosäljare.'):sc[5]>=62?'Neutralt sentiment; inga extrema positioneringar.':'Svagt intresse — låg volym i optioner.',ind:[`P/C ${L?(sc[5]>=74?'0,62':'0,85'):'1,24'}`]}
   ];
+}
+// Suitable instruments per horizon
+function instruments(m){
+  const L=m.s>0,hz=m.hz,e=m.lv.entry,tp2=Math.abs(m.lv.tp2-e)/e*100,sl=m.risk/e*100;
+  const cLev=sl<.6?5:3;
+  const finD=Math.max(m.risk*1.6,e*({intradag:.10,vecka:.15}[hz]||.33));
+  const fin=e-(L?1:-1)*finD,mLev=Math.round(e/finD*10)/10;
+  const cert={id:'cert',lev:cLev,name:`${L?'Bull':'Bear'}-certifikat ×${cLev}`,
+    rec:`Daglig hävstång utan knock-out. När positionen stängs samma dag uppstår ingen volatilitetsförlust — därför förstahandsvalet intradag.`,
+    no:'Hävstången räknas om varje dag. Hålls positionen flera dagar i en fram-och-tillbaka-marknad tappar certifikatet värde (volatilitetsförlust).'};
+  const mini={id:'mini',lev:mLev,name:`Mini ${L?'long':'short'} ≈ ×${f1(mLev)}`,
+    rec:`Finansieringsnivå ${f2(fin)} ligger bortom stop loss, så knock-out nås inte innan SL. Ingen daglig omviktning.`};
+  const stock={id:'stock',lev:1,name:'Aktien',rec:L?'Ingen hävstång, ingen löptid — rätt verktyg för längre case.':'Blankning av aktien kräver lånade aktier; en bear-produkt är ofta enklare.'};
+  const warr={id:'warr',lev:3,name:`${L?'Köp':'Sälj'}warrant, lång löptid`,rec:'Minst 12 månaders löptid, delta ≈ 0,6. Förlusten begränsas till insatsen men tidsvärdet kostar.',
+    no:'Tidsvärde och bred spread äter vinsten på korta rörelser.'};
+  const eff=x=>({tp:x.lev*tp2,sl:-x.lev*sl});
+  const R=(x,tag,txt)=>Object.assign({},x,{tag,txt},eff(x));
+  if(hz==='intradag')return [R(cert,'rec',cert.rec),R(mini,'alt',mini.rec),R(warr,'no',warr.no)];
+  if(hz==='vecka')return [R(mini,'rec',mini.rec),R(stock,'alt',stock.rec),R(cert,'no',cert.no)];
+  if(hz==='manad'||hz==='kvartal')return [R(stock,'rec',stock.rec),R(mini,'alt',`Låg hävstång (≈ ×${f1(mLev)}). `+mini.rec),R(cert,'no',cert.no)];
+  return [R(stock,'rec',stock.rec),R(warr,'alt',warr.rec),R(cert,'no',cert.no)];
 }
 
 // ---------- state
-const state={hz:'vecka',mkt:'all',sel:null,ov:{fib:true,ew:true,lv:true,rsi:true},cap:250000,riskPct:1};
+const state={hz:'intradag',mkt:'all',sel:null,ov:{lv:true,fib:true,ew:true,ema:true,vwap:true,vol:true,rsi:true},cap:250000,riskPct:1,ins:null};
 try{const h=location.hash.slice(1);if(HZ[h])state.hz=h}catch(e){}
-try{const v=JSON.parse(localStorage.getItem('maa-ui')||'null');if(v){Object.assign(state.ov,v.ov||{});if(v.cap)state.cap=v.cap;if(v.riskPct)state.riskPct=v.riskPct;if(!HZ[location.hash.slice(1)]&&HZ[v.hz])state.hz=v.hz}}catch(e){}
-const save=()=>{try{localStorage.setItem('maa-ui',JSON.stringify({ov:state.ov,cap:state.cap,riskPct:state.riskPct,hz:state.hz}))}catch(e){}};
+try{const v=JSON.parse(localStorage.getItem('maa-ui2')||'null');if(v){Object.assign(state.ov,v.ov||{});if(v.cap)state.cap=v.cap;if(v.riskPct)state.riskPct=v.riskPct;if(!HZ[location.hash.slice(1)]&&HZ[v.hz])state.hz=v.hz}}catch(e){}
+const save=()=>{try{localStorage.setItem('maa-ui2',JSON.stringify({ov:state.ov,cap:state.cap,riskPct:state.riskPct,hz:state.hz}))}catch(e){}};
 const inMkt=s=>state.mkt==='all'||T[s][5].split(' ').includes(state.mkt);
 
 // ---------- render pieces
@@ -524,16 +624,23 @@ function renderStrip(){
     const cls=n==='VIX'?(ch>0?'down':'up'):(ch>=0?'up':'down');
     return `<div class="idx"><span class="n">${n}</span><span class="v num">${v>1000?f1(v):f2(v)}</span><span class="c num ${cls==='up'?'pos':'neg'}">${sgn(ch,f2)} %</span>${spark(a,cls,120,22,false)}</div>`}).join('');
 }
+function renderMethod(){
+  document.getElementById('m-grid').innerHTML=METHOD.map(([h,q,li,src])=>`<div class="m-card"><h3>${h}</h3><p class="q">${q}</p><ul>${li.map(x=>`<li>${x}</li>`).join('')}</ul><p class="src">${src}</p></div>`).join('');
+  const rows=SIG.map((n,i)=>{const ws=HZ_ORDER.map(k=>HZ[k].w[i]);const mx=Math.max(...ws);return `<tr><td>${n}</td>${ws.map(w=>`<td class="num${w===mx?' hi':''}">${Math.round(w*100)} %</td>`).join('')}</tr>`}).join('');
+  document.getElementById('wt').innerHTML=`<table><thead><tr><th>Viktning per horisont</th>${HZ_ORDER.map(k=>`<th>${HZ[k].t}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>`;
+}
 function renderHz(){
-  document.getElementById('hz').innerHTML=HZ_ORDER.map(k=>`<button role="tab" id="tab-${k}" aria-selected="${k===state.hz}" data-hz="${k}"><span class="t">${HZ[k].t}</span><span class="s">${HZ[k].valid} · ${HZ[k].tf}</span></button>`).join('');
+  document.getElementById('hz').innerHTML=HZ_ORDER.map(k=>{const H=HZ[k];const tf={intra:'1–5 min',hour:'1 timme',day:'1 dag',week:'1 vecka'}[H.kind];
+    return `<button role="tab" id="tab-${k}" aria-selected="${k===state.hz}" data-hz="${k}"><span class="t">${H.t}</span><span class="s">${H.valid} · ${tf}</span></button>`}).join('');
   const H=HZ[state.hz];
   document.getElementById('h1').textContent='Top picks · '+H.t;
+  document.getElementById('hsub').textContent=H.sub;
   document.getElementById('regime').innerHTML=H.regime.map(([a,b])=>`<span>${a} <b>${b}</b></span>`).join('');
   const mk=[['all','Alla marknader'],['ndx','Nasdaq'],['spx','S&P 500'],['nord','Norden']];
   document.getElementById('mk').innerHTML=mk.map(([k,l])=>`<button class="chip" aria-pressed="${state.mkt===k}" data-mkt="${k}">${l}</button>`).join('');
 }
 function renderPicks(){
-  const p=pool(state.hz);
+  const p=pool(state.hz),intra=state.hz==='intradag';
   const tops=p.top.map(it=>model(it,state.hz)).sort((a,b)=>b.score-a.score);
   const shown=tops.filter(m=>inMkt(m.item.s));
   document.getElementById('pk-count').textContent=state.mkt==='all'?'Rangordnat efter poäng':`${shown.length} av 5 i vald marknad`;
@@ -544,8 +651,8 @@ function renderPicks(){
     return `<button class="pick" data-sel="top:${m.item.s}" aria-current="${!!cur}">
       <span class="rank">${rank}</span>
       <span class="pk-t"><span class="sym">${esc(m.item.s)}</span><span class="nm">${esc(t[0])}</span></span>
-      <span class="pk-b"><span class="dir ${m.item.dir}">${m.item.dir==='L'?'LÅNG':'KORT'}</span><span>R/R <b class="num">${f1(m.rr[1])}</b></span><span class="mkt">${t[1]}</span></span>
-      <span class="pk-r">${spark(m.c.slice(-36).map(x=>x.c),m.s>0?'up':'down')}<span class="score-sm">${m.score}</span></span>
+      <span class="pk-b"><span class="dir ${m.item.dir}">${m.item.dir==='L'?'LÅNG':'KORT'}</span><span>R/R <b class="num">${f1(m.rr[1])}</b></span>${intra?`<span class="exit">Stäng ${hm(exitMin(m.item.s))}</span>`:`<span class="mkt">${t[1]}</span>`}</span>
+      <span class="pk-r">${spark(m.c.slice(-36).map(x=>x.close),m.s>0?'up':'down')}<span class="score-sm">${m.score}</span></span>
     </button>`}).join('');
   const w=p.watch.map(it=>model(it,state.hz)).filter(m=>inMkt(m.item.s)).sort((a,b)=>b.score-a.score);
   document.getElementById('wl-count').textContent=`${w.length} instrument · ${HZ[state.hz].t.toLowerCase()}`;
@@ -561,79 +668,94 @@ function renderPicks(){
       <td class="nt">${esc(m.item.text)}</td></tr>`}).join(''):`<tr><td colspan="9" style="color:var(--muted)">Inga bevakningar i vald marknad.</td></tr>`;
   return {tops:shown,watch:w};
 }
-
-function chartSVG(m){
-  const W=820,PH=300,RH=state.ov.rsi?74:0,G=state.ov.rsi?16:0,H=PH+G+RH+18,L=10,AX=70,RX=W-AX,top=12;
-  const hist=.83,xw=(RX-L)*hist,N=m.c.length,cw=xw/N,xOf=i=>L+cw*(i+.5);
-  const lv=m.lv;
-  let vals=m.c.flatMap(c=>[c.h,c.l]);
-  if(state.ov.lv)vals=vals.concat([lv.sl,lv.tp1,lv.tp2,lv.tp3]);
-  let mn=Math.min(...vals),mx=Math.max(...vals);const pad=(mx-mn)*.06;mn-=pad;mx+=pad;
-  const y=v=>top+(mx-v)/(mx-mn)*(PH-top);
-  // ticks
-  const raw=(mx-mn)/5,mag=Math.pow(10,Math.floor(Math.log10(raw))),step=[1,2,2.5,5,10].map(k=>k*mag).find(k=>k>=raw);
-  let out=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Kursgraf för ${esc(m.item.s)} med analysnivåer">`;
-  out+=`<rect x="${L+xw}" y="${top}" width="${RX-L-xw}" height="${PH-top}" class="proj-bg"/>`;
-  for(let v=Math.ceil(mn/step)*step;v<=mx;v+=step){const yy=y(v);out+=`<line x1="${L}" x2="${RX}" y1="${yy}" y2="${yy}" class="grid-l"/><text x="${RX+8}" y="${yy+3.5}" class="ax-t">${step<1?f2(v):nf0.format(v)}</text>`}
-  out+=`<text x="${L+xw+8}" y="${top+14}" class="ax-t">Projektion</text>`;
-  // fib
-  if(state.ov.fib){
-    [[0,'0 %'],[.236,'23,6 %'],[.382,'38,2 %'],[.5,'50 %'],[.618,'61,8 %'],[.786,'78,6 %'],[1,'100 %']].forEach(([rf,lab])=>{
-      const yy=y(m.val(1-rf));out+=`<line x1="${L}" x2="${L+xw}" y1="${yy}" y2="${yy}" class="fib-l"/><text x="${L+4}" y="${yy-3}" class="fib-t">${lab}</text>`});
-  }
-  // entry zone
-  if(state.ov.lv){const a=y(lv.zHi),b=y(lv.zLo);out+=`<rect x="${L}" y="${Math.min(a,b)}" width="${RX-L}" height="${Math.abs(b-a)}" class="zone"/>`}
-  // candles
-  m.c.forEach((c,i)=>{const cls=c.c>=c.o?'c-up':'c-dn',x=xOf(i),bw=Math.max(2,cw*.62);
-    const yo=y(c.o),yc=y(c.c);out+=`<line x1="${x}" x2="${x}" y1="${y(c.h)}" y2="${y(c.l)}" class="${cls}" stroke-width="1"/><rect x="${x-bw/2}" y="${Math.min(yo,yc)}" width="${bw}" height="${Math.max(1,Math.abs(yc-yo))}" class="${cls}"/>`});
-  const lastX=xOf(N-1);
-  out+=`<line x1="${lastX}" x2="${lastX}" y1="${top}" y2="${PH}" class="now-l"/>`;
-  // elliott
-  if(state.ov.ew){
-    const endX=RX-64,midX=lastX+(endX-lastX)*.3;
-    out+=`<path d="M${lastX} ${y(m.P)}L${midX} ${y(m.val(m.eU-.02))}L${endX} ${y(lv.tp2)}" class="ew-p"/>`;
-    const lab=(x,v,t,above)=>{const yy=y(v)+(above?-14:14);out+=`<circle cx="${x}" cy="${yy}" r="8.5" class="ew-c"/><text x="${x}" y="${yy+3.5}" text-anchor="middle" class="ew-t">${t}</text>`};
-    m.piv.forEach((p,k)=>{if(!p.l||k===m.piv.length-1)return;const pk=p.u>=m.piv[k-1].u;lab(xOf(m.pIdx[k]),m.val(p.u),p.l,(m.s>0)===pk)});
-    lab(lastX,m.P,'4',m.s<0);
-    lab(endX,lv.tp2,'5',m.s>0);
-  }
-  // levels + axis tags
-  if(state.ov.lv){
-    const L2=[['TP3',lv.tp3,'tp'],['TP2',lv.tp2,'tp'],['TP1',lv.tp1,'tp'],['Entry',lv.entry,'e'],['SL',lv.sl,'sl']].map(a=>({n:a[0],v:a[1],k:a[2],y:y(a[1])}));
-    L2.forEach(l=>{out+=`<line x1="${L}" x2="${RX}" y1="${l.y}" y2="${l.y}" class="lv-${l.k}"/>`});
-    const sorted=[...L2].sort((a,b)=>a.y-b.y);for(let i=1;i<sorted.length;i++)if(sorted[i].y-sorted[i-1].y<17)sorted[i].ty=(sorted[i-1].ty??sorted[i-1].y)+17;
-    sorted.forEach(l=>{const ty=l.ty??l.y;
-      out+=`<text x="${RX-6}" y="${l.y-4}" text-anchor="end" class="lv-name" style="fill:var(--${l.k==='e'?'accent':l.k==='sl'?'down':'up'})">${l.n}</text>`;
-      out+=`<rect x="${RX+2}" y="${ty-8}" width="${AX-4}" height="16" rx="3" class="tag-${l.k}"/><text x="${RX+6}" y="${ty+3.5}" class="tag-t">${f2(l.v)}</text>`});
-  }
-  // current price tag
-  out+=`<rect x="${RX+2}" y="${y(m.P)-8}" width="${AX-4}" height="16" rx="3" style="fill:var(--ink)"/><text x="${RX+6}" y="${y(m.P)+3.5}" style="fill:var(--bg);font:500 10px var(--mono)">${f2(m.P)}</text>`;
-  // rsi
-  if(state.ov.rsi){
-    const r0=PH+G,ry=v=>r0+(100-v)/100*RH;
-    out+=`<line x1="${L}" x2="${RX}" y1="${ry(70)}" y2="${ry(70)}" class="rsi-b"/><line x1="${L}" x2="${RX}" y1="${ry(30)}" y2="${ry(30)}" class="rsi-b"/><line x1="${L}" x2="${RX}" y1="${r0}" y2="${r0}" class="grid-l"/>`;
-    const pts=m.rsi.map((v,i)=>v==null?null:`${xOf(i).toFixed(1)} ${ry(v).toFixed(1)}`).filter(Boolean);
-    out+=`<path d="M${pts.join('L')}" class="rsi-l"/>`;
-    out+=`<text x="${L+2}" y="${r0+11}" class="ax-t">RSI 14 · ${m.rsiNow}</text><text x="${RX+8}" y="${ry(70)+3.5}" class="ax-t">70</text><text x="${RX+8}" y="${ry(30)+3.5}" class="ax-t">30</text>`;
-  }
-  out+=`<text x="${L}" y="${H-3}" class="ax-t">← ${N} staplar · ${HZ[m.hz].tf}</text></svg>`;
-  return out;
-}
-
 function ring(score){
   const r=24,c=2*Math.PI*r,col=score>=75?'up':score>=62?'accent':'warn';
   return `<div class="ring" title="Viktad poäng"><svg viewBox="0 0 58 58"><circle cx="29" cy="29" r="${r}" fill="none" style="stroke:var(--line-2)" stroke-width="5"/><circle cx="29" cy="29" r="${r}" fill="none" style="stroke:var(--${col})" stroke-width="5" stroke-linecap="round" stroke-dasharray="${c*score/100} ${c}"/></svg><span>${score}</span></div>`;
 }
 
+// ---------- chart (TradingView Lightweight Charts)
+let chart=null;
+function drawChart(m){
+  const host=document.getElementById('chart');if(!host)return;
+  if(chart){chart.remove();chart=null}
+  const LW=window.LightweightCharts;
+  if(!LW){host.innerHTML='<div class="chart-err">Grafbiblioteket kunde inte laddas. Kontrollera anslutningen och ladda om sidan.</div>';return}
+  const C=n=>cssVar('--'+n),ov=state.ov,intra=m.hz==='intradag',k=HZ[m.hz].kind;
+  chart=LW.createChart(host,{autoSize:true,
+    layout:{background:{type:'solid',color:C('surface')},textColor:C('muted'),fontFamily:'JetBrains Mono, ui-monospace, monospace',fontSize:11,attributionLogo:true,panes:{separatorColor:C('line'),separatorHoverColor:C('line-2')}},
+    grid:{vertLines:{color:C('line-2')},horzLines:{color:C('line-2')}},
+    rightPriceScale:{borderColor:C('line')},
+    timeScale:{borderColor:C('line'),timeVisible:k==='intra'||k==='hour',secondsVisible:false,rightOffset:4},
+    crosshair:{mode:0},
+    localization:{locale:'sv-SE',priceFormatter:p=>f2(p)}});
+  const lv=m.lv,up=C('up'),dn=C('down');
+  const extra=ov.lv?[lv.sl,lv.tp1,lv.tp2,lv.tp3]:[];
+  const cs=chart.addSeries(LW.CandlestickSeries,{upColor:up,downColor:dn,borderUpColor:up,borderDownColor:dn,wickUpColor:up,wickDownColor:dn,
+    priceFormat:{type:'price',precision:2,minMove:.01},
+    autoscaleInfoProvider:orig=>{const r=orig();if(r&&r.priceRange&&extra.length){r.priceRange.minValue=Math.min(r.priceRange.minValue,...extra);r.priceRange.maxValue=Math.max(r.priceRange.maxValue,...extra)}return r}});
+  cs.setData(m.c.map(({time,open,high,low,close})=>({time,open,high,low,close})));
+  cs.priceScale().applyOptions({scaleMargins:{top:.08,bottom:ov.vol?.2:.06}});
+  if(ov.vol){
+    const vs=chart.addSeries(LW.HistogramSeries,{priceScaleId:'vol',priceFormat:{type:'volume'},lastValueVisible:false,priceLineVisible:false});
+    vs.priceScale().applyOptions({scaleMargins:{top:.84,bottom:0}});
+    vs.setData(m.c.map(x=>({time:x.time,value:x.vol,color:x.close>=x.open?C('up-soft'):C('down-soft')})));
+  }
+  const line=(data,color,w=1.5,style=0)=>{const s=chart.addSeries(LW.LineSeries,{color,lineWidth:w,lineStyle:style,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false});s.setData(data);return s};
+  if(ov.ema){line(m.c.map((x,i)=>({time:x.time,value:m.e20[i]})),C('ema20'));line(m.c.map((x,i)=>({time:x.time,value:m.e50[i]})),C('ema50'))}
+  if(intra&&ov.vwap)line(m.c.map((x,i)=>({time:x.time,value:m.vwap[i]})),C('vwap'),1.5,2);
+  if(ov.fib){
+    [[.236,'23,6 %'],[.382,'38,2 %'],[.5,'50 %'],[.618,'61,8 %'],[.786,'78,6 %']].forEach(([rf,t])=>
+      cs.createPriceLine({price:m.val(1-rf),color:C('fib'),lineWidth:1,lineStyle:1,axisLabelVisible:false,title:'Fib '+t}));
+  }
+  if(ov.lv){
+    const pl=(price,color,title,style=2,w=1)=>cs.createPriceLine({price,color,lineWidth:w,lineStyle:style,axisLabelVisible:true,title});
+    pl(lv.zHi,C('accent'),'',3);pl(lv.zLo,C('accent'),'',3);
+    cs.createPriceLine({price:lv.entry,color:C('accent'),lineWidth:2,lineStyle:0,axisLabelVisible:true,title:'Entry'});
+    pl(lv.sl,dn,'SL',2,2);pl(lv.tp1,up,'TP1');pl(lv.tp2,up,'TP2');pl(lv.tp3,up,'TP3');
+  }
+  if(ov.ew){
+    const ink=C('ink'),last=m.N-1,tt=m.tl.t,f=m.tl.fwd,mid=last+Math.max(1,Math.round(f*.35));
+    const mk=m.piv.map((p,i)=>{if(!p.l)return null;const pk=i===m.piv.length-1?false:p.u>=m.piv[i-1].u;const above=(m.s>0)===pk;
+      return {time:m.c[m.pIdx[i]].time,position:above?'aboveBar':'belowBar',shape:'circle',color:ink,text:p.l,size:.6}}).filter(Boolean);
+    LW.createSeriesMarkers(cs,mk);
+    const proj=line([{time:tt[last],value:m.P},{time:tt[mid],value:m.val(m.eU-.02)},{time:tt[last+f],value:lv.tp2}],ink,1.5,2);
+    LW.createSeriesMarkers(proj,[{time:tt[last+f],position:m.s>0?'aboveBar':'belowBar',shape:'circle',color:ink,text:'5',size:.6}]);
+  }
+  if(ov.rsi){
+    const rs=chart.addSeries(LW.LineSeries,{color:C('accent'),lineWidth:1.5,priceLineVisible:false,lastValueVisible:true,priceFormat:{type:'price',precision:0,minMove:1},
+      autoscaleInfoProvider:()=>({priceRange:{minValue:10,maxValue:90}})},1);
+    rs.setData(m.rsi.map((v,i)=>v==null?null:{time:m.c[i].time,value:v}).filter(Boolean));
+    rs.createPriceLine({price:70,color:C('faint'),lineWidth:1,lineStyle:2,axisLabelVisible:false,title:'70'});
+    rs.createPriceLine({price:30,color:C('faint'),lineWidth:1,lineStyle:2,axisLabelVisible:false,title:'30'});
+    const panes=chart.panes();if(panes[1]){panes[0].setStretchFactor(3.2);panes[1].setStretchFactor(1)}
+  }
+  chart.timeScale().fitContent();
+  // legend
+  const lg=document.getElementById('legend');
+  const idxOf={};m.c.forEach((x,i)=>idxOf[x.time]=i);
+  const fmtT=t=>{const d=new Date(t*1000),dd=d.getUTCDate()+' '+['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'][d.getUTCMonth()];return (k==='intra'||k==='hour')?dd+' '+hm(d.getUTCHours()*60+d.getUTCMinutes()):dd+' '+d.getUTCFullYear()};
+  const setLg=i=>{const x=m.c[i];if(!x)return;
+    lg.innerHTML=`<span><b>${esc(m.item.s)}</b> · ${tfLabel(m.hz,m.item.s)} · ${fmtT(x.time)}</span><span>Ö <b>${f2(x.open)}</b> H <b>${f2(x.high)}</b> L <b>${f2(x.low)}</b> S <b>${f2(x.close)}</b></span>`+
+      (ov.ema?`<span style="color:${C('ema20')}">EMA20 ${f2(m.e20[i])}</span><span style="color:${C('ema50')}">EMA50 ${f2(m.e50[i])}</span>`:'')+
+      (intra&&ov.vwap?`<span style="color:${C('vwap')}">VWAP ${f2(m.vwap[i])}</span>`:'')+
+      (ov.rsi&&m.rsi[i]!=null?`<span>RSI ${Math.round(m.rsi[i])}</span>`:'')};
+  setLg(m.N-1);
+  chart.subscribeCrosshairMove(p=>{const i=p&&p.time!=null?idxOf[p.time]:undefined;setLg(i==null?m.N-1:i)});
+}
+
 function renderDetail(m){
   const el=document.getElementById('detail');
-  if(!m){el.innerHTML='<div style="padding:28px;color:var(--muted)">Välj ett instrument.</div>';return}
-  const {item,t,lv,rr,s}=m,cur=t[2],isW=item.kind==='watch',H=HZ[m.hz];
+  if(!m){if(chart){chart.remove();chart=null}el.innerHTML='<div style="padding:28px;color:var(--muted)">Välj ett instrument.</div>';return}
+  const {item,t,lv,rr,s}=m,cur=t[2],isW=item.kind==='watch',H=HZ[m.hz],intra=m.hz==='intradag';
   const pctE=v=>(v-lv.entry)/lv.entry*100;
-  const cm=comments(m);
-  const tot=Math.abs(lv.tp3-lv.sl),rW=m.risk/tot*100;
-  const mk=v=>Math.abs(v-lv.sl)/tot*100;
-  const confl=[pctTxt(item.ret)+' Fibonacci','Våg 4-korrektion',item.setup,m.rsiNow<45&&s>0?'RSI översåld':m.rsiNow>55&&s<0?'RSI överköpt':'RSI neutral'];
+  const sg=signals(m),ins=instruments(m);
+  const tot=Math.abs(lv.tp3-lv.sl),rW=m.risk/tot*100,mk=v=>Math.abs(v-lv.sl)/tot*100;
+  const confl=[pctTxt(item.ret)+' Fibonacci','Våg 4-korrektion',Math.abs(m.P-m.e50Now)/m.P<H.vol*.25?'EMA 50':'EMA 20',intra?'VWAP':item.setup];
+  const ex=exitMin(item.s);
+  const usable=ins.filter(x=>x.tag!=='no');
+  if(!state.ins||!usable.find(x=>x.id===state.ins))state.ins=usable[0].id;
+  const toggles=[['lv','Handelsnivåer'],['fib','Fibonacci'],['ew','Elliott Wave'],['ema','EMA 20/50'],intra?['vwap','VWAP']:null,['vol','Volym'],['rsi','RSI']].filter(Boolean);
+  const sw={ema:'linear-gradient(90deg,var(--ema20) 50%,var(--ema50) 50%)',vwap:'var(--vwap)',fib:'var(--fib)',lv:'var(--accent)',rsi:'var(--accent)'};
   el.innerHTML=`
   <div class="d-head">
     <div class="d-id">
@@ -642,26 +764,27 @@ function renderDetail(m){
       <div class="setup">Setup: <b>${esc(item.setup)}</b> · ${H.t} (${H.valid})</div>
     </div>
     <div class="d-kpis">
+      ${intra?`<div class="kpi exit-k"><span class="l">Stäng senast</span><span class="v sm">${hm(ex)} <span style="font-size:11px;color:var(--muted)">${leftTxt(ex)}</span></span></div>`:''}
       <div class="kpi"><span class="l">R/R (TP2)</span><span class="v">${f1(rr[1])}</span></div>
       <div class="kpi"><span class="l">Träffchans</span><span class="v">${m.prob} %</span></div>
       ${ring(m.score)}
     </div>
   </div>
+  ${intra?`<div class="intraday-note"><b>Intradag</b><span>Positionen stängs senast ${hm(ex)} CET (${t[1]} stänger ${hm(EX[t[1]].c)}), även om varken TP eller SL nåtts. Ingen position hålls över natten.</span></div>`:''}
   <div class="chart-box">
     <div class="chart-tools">
-      <div class="toggles">
-        ${[['lv','Handelsnivåer'],['fib','Fibonacci'],['ew','Elliott Wave'],['rsi','RSI']].map(([k,l])=>`<label class="tg"><input type="checkbox" id="ov-${k}" data-ov="${k}" ${state.ov[k]?'checked':''}>${l}</label>`).join('')}
-      </div>
-      <span class="tf">Graf: ${H.tf} · exempeldata</span>
+      <div class="toggles">${toggles.map(([k,l])=>`<label class="tg"><input type="checkbox" id="ov-${k}" data-ov="${k}" ${state.ov[k]?'checked':''}>${sw[k]?`<i style="background:${sw[k]}"></i>`:''}${l}</label>`).join('')}</div>
+      <span class="tf">${tfLabel(m.hz,item.s)} · exempeldata</span>
     </div>
-    <div class="chart">${chartSVG(m)}</div>
-    <div class="chart-foot"><span>Blå zon = entryområde · streckad svart = projicerad våg 5</span><a class="mw" href="${mwUrl(item.s)}" target="_blank" rel="noopener">Öppna ${esc(item.s)} på MarketWatch ↗</a></div>
+    <div class="chart-wrap"><div class="legend" id="legend"></div><div id="chart"></div></div>
+    <div class="chart-foot"><span>Streckade linjer: blå = entryzon, röd = SL, grön = TP · svart streckad = projicerad våg 5</span>
+      <span class="links"><a class="mw" href="${tvUrl(item.s)}" target="_blank" rel="noopener">TradingView ↗</a><a class="mw" href="${mwUrl(item.s)}" target="_blank" rel="noopener">MarketWatch ↗</a></span></div>
   </div>
   <div class="d-grid">
     <section>
       <h3 class="sec-t"><span>Handelsplan</span><span>${cur}</span></h3>
       <table class="plan">
-        <tr><td><span class="lvl"><i style="background:var(--accent)"></i>Entry</span></td><td class="num">${f2(lv.zLo<lv.zHi?lv.zLo:lv.zHi)}–${f2(lv.zLo<lv.zHi?lv.zHi:lv.zLo)}</td><td class="sub">${isW?'Trigger':'Aktiv zon'}</td></tr>
+        <tr><td><span class="lvl"><i style="background:var(--accent)"></i>Entry</span></td><td class="num">${f2(lv.zLo)}–${f2(lv.zHi)}</td><td class="sub">${isW?'Trigger':'Aktiv zon'}</td></tr>
         <tr><td><span class="lvl"><i style="background:var(--down)"></i>Stop loss</span></td><td class="num">${f2(lv.sl)}</td><td class="sub num">${sgn(pctE(lv.sl))} % · −1R</td></tr>
         ${['tp1','tp2','tp3'].map((k,i)=>`<tr><td><span class="lvl"><i style="background:var(--up)"></i>TP${i+1}</span> <span class="sub">${['tidigare topp','127,2 % ext.','161,8 % ext.'][i]}</span></td><td class="num">${f2(lv[k])}</td><td class="sub num">${sgn(pctE(lv[k]))} % · +${f1(rr[i])}R</td></tr>`).join('')}
       </table>
@@ -672,13 +795,13 @@ function renderDetail(m){
       <div class="stats">
         <div class="stat"><div class="l">Förväntat värde</div><div class="v ${m.ev>=0?'pos':'neg'}">${sgn(m.ev)}R</div></div>
         <div class="stat"><div class="l">Risk per aktie</div><div class="v">${f2(m.risk)}</div></div>
-        <div class="stat"><div class="l">Förslag exit</div><div class="v" style="font-size:12.5px;font-family:var(--body)">⅓ vid varje TP</div></div>
+        <div class="stat"><div class="l">${intra?'Tidsstopp':'Förslag exit'}</div><div class="v" style="font-size:12.5px;font-family:var(--body)">${intra?`Stäng ${hm(ex)}`:'⅓ vid varje TP'}</div></div>
       </div>
     </section>
     <section>
       <h3 class="sec-t"><span>Signaler</span><span>Viktning ${H.t.toLowerCase()}</span></h3>
       <div class="sig">
-        ${SIG.map((n,i)=>{const v=item.sc[i],col=v>=75?'up':v>=62?'accent':'warn';return `<div><div class="sg-h"><div><div class="sg-n">${n}<em>vikt ${Math.round(H.w[i]*100)} %</em></div><div class="sg-bar"><i style="width:${v}%;background:var(--${col})"></i></div></div><span class="sg-v">${v}</span></div><div class="sg-c">${esc(cm[i])}</div></div>`}).join('')}
+        ${SIG.map((n,i)=>{const v=item.sc[i],col=v>=75?'up':v>=62?'accent':'warn';return `<div><div class="sg-h"><div><div class="sg-n">${n}<em>vikt ${Math.round(H.w[i]*100)} %</em></div><div class="sg-bar"><i style="width:${v}%;background:var(--${col})"></i></div></div><span class="sg-v">${v}</span></div><div class="sg-c">${esc(sg[i].txt)}</div><div class="sg-i">${sg[i].ind.map(x=>`<span>${esc(x)}</span>`).join('')}</div></div>`}).join('')}
       </div>
     </section>
   </div>
@@ -688,27 +811,35 @@ function renderDetail(m){
       <p class="thesis">${esc(item.text)}</p>
       <div class="conf">${confl.map(c=>`<span>${esc(c)}</span>`).join('')}</div>
       ${item.risk?`<div class="risk"><b>Risk</b><span>${esc(item.risk)}</span></div>`:''}
-      <p class="inval">Caset ogiltigförklaras vid stängning ${s>0?'under':'över'} <b class="num">${f2(lv.sl)}</b> ${cur}.</p>
+      <p class="inval">Caset ogiltigförklaras vid ${intra?'handel':'stängning'} ${s>0?'under':'över'} <b class="num">${f2(lv.sl)}</b> ${cur}${intra?` — eller vid tidsstoppet ${hm(ex)}`:''}.</p>
     </section>
     <section>
+      <h3 class="sec-t"><span>Instrument</span><span>Effekt vid TP2 / SL</span></h3>
+      <div class="instr">
+        ${ins.map(x=>`<div class="ins${x.tag==='no'?' avoid':''}"><div class="ins-h"><b>${esc(x.name)}</b><span class="ins-tag ${x.tag}">${{rec:'Rekommenderas',alt:'Alternativ',no:'Undvik'}[x.tag]}</span></div><p>${esc(x.txt)}</p>${x.tag!=='no'?`<div class="ins-m num"><span class="pos">TP2 ${sgn(x.tp)} %</span><span class="neg">SL ${sgn(x.sl)} %</span></div>`:''}</div>`).join('')}
+      </div>
       <h3 class="sec-t"><span>Positionsstorlek</span></h3>
       <div class="calc">
         <label for="cap">Kapital (SEK)<input id="cap" type="number" min="0" step="10000" value="${state.cap}"></label>
         <label for="rp">Risk per affär (%)<input id="rp" type="number" min="0.1" max="5" step="0.1" value="${state.riskPct}"></label>
+        <label for="ins" class="full">Instrument<select id="ins">${usable.map(x=>`<option value="${x.id}" ${x.id===state.ins?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>
       </div>
       <div class="calc-out" id="calc-out"></div>
-      <p class="note">${cur!=='SEK'?`Omräknat med 1 ${cur} = ${f2(FX[cur])} SEK. `:''}Storleken baseras på avståndet entry → stop loss.</p>
+      <p class="note">${cur!=='SEK'?`Omräknat med 1 ${cur} = ${f2(FX[cur])} SEK. `:''}Förenklat: ignorerar spread, courtage och finansieringskostnad. Warrantens hävstång är en uppskattning.</p>
     </section>
   </div>`;
-  calc(m);
+  drawChart(m);calc(m);
 }
 function calc(m){
-  const fx=FX[m.t[2]],riskSek=state.cap*state.riskPct/100,nRisk=Math.floor(riskSek/(m.risk*fx)||0),nMax=Math.floor(state.cap/(m.lv.entry*fx)||0),n=Math.min(nRisk,nMax),capped=nRisk>nMax,val=n*m.lv.entry*fx;
-  const o=document.getElementById('calc-out');if(!o)return;
+  const o=document.getElementById('calc-out');if(!o||!m)return;
+  const x=instruments(m).find(i=>i.id===state.ins)||{lev:1,id:'stock'};
+  const fx=FX[m.t[2]],riskSek=state.cap*state.riskPct/100,px=m.lv.entry*fx;
+  const nRisk=Math.floor(riskSek/(m.risk*fx)||0),nMax=Math.floor(state.cap*x.lev/px||0),n=Math.min(nRisk,nMax),capped=nRisk>nMax;
+  const expo=n*px,stake=expo/x.lev;
   o.innerHTML=`<div><span>Riskbelopp</span><span class="num">${nf0.format(riskSek)} SEK</span></div>
-  <div><span>Antal aktier${capped?' <span class="st build">begränsat av kapital</span>':''}</span><span class="num">${nf0.format(n)} st</span></div>
-  <div><span>Positionsvärde</span><span class="num">${nf0.format(val)} SEK</span></div>
-  <div><span>Andel av kapital</span><span class="num">${f1(state.cap?val/state.cap*100:0)} %</span></div>
+  <div><span>Exponering${x.lev>1?' (motsv. aktier)':''}</span><span class="num">${nf0.format(n)} st · ${nf0.format(expo)} SEK</span></div>
+  <div><span>Insats${capped?' <span class="st build">begränsad av kapital</span>':''}</span><span class="num">${nf0.format(stake)} SEK</span></div>
+  <div><span>Andel av kapital</span><span class="num">${f1(state.cap?stake/state.cap*100:0)} %</span></div>
   <div><span>Vinst vid TP2</span><span class="num pos">+${nf0.format(n*m.risk*fx*m.rr[1])} SEK</span></div>`;
 }
 
@@ -724,19 +855,25 @@ function render(){
 
 // ---------- events
 document.addEventListener('click',e=>{
-  const hz=e.target.closest('[data-hz]');if(hz){state.hz=hz.dataset.hz;state.sel=null;save();try{history.replaceState(null,'','#'+state.hz)}catch(_){}render();return}
+  const hz=e.target.closest('[data-hz]');if(hz){state.hz=hz.dataset.hz;state.sel=null;state.ins=null;save();try{history.replaceState(null,'','#'+state.hz)}catch(_){}render();return}
   const mk=e.target.closest('[data-mkt]');if(mk){state.mkt=mk.dataset.mkt;state.sel=null;render();return}
-  const sel=e.target.closest('[data-sel]');if(sel){const [kind,s]=sel.dataset.sel.split(':');state.sel={kind,s};render();
+  const sel=e.target.closest('[data-sel]');if(sel){const [kind,s]=sel.dataset.sel.split(':');state.sel={kind,s};state.ins=null;render();
     if(kind==='watch'||window.innerWidth<1100)document.getElementById('detail').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})}
 });
 document.addEventListener('keydown',e=>{const tr=e.target.closest('tr[data-sel]');if(tr&&(e.key==='Enter'||e.key===' ')){e.preventDefault();tr.click()}
-  const tab=e.target.closest('[data-hz]');if(tab&&(e.key==='ArrowRight'||e.key==='ArrowLeft')){const i=HZ_ORDER.indexOf(state.hz)+(e.key==='ArrowRight'?1:-1);if(HZ_ORDER[i]){state.hz=HZ_ORDER[i];state.sel=null;render();document.getElementById('tab-'+state.hz).focus()}}});
-document.addEventListener('change',e=>{const ov=e.target.dataset&&e.target.dataset.ov;if(ov){state.ov[ov]=e.target.checked;save();renderDetail(current);document.getElementById('ov-'+ov).focus()}});
+  const tab=e.target.closest('[data-hz]');if(tab&&(e.key==='ArrowRight'||e.key==='ArrowLeft')){const i=HZ_ORDER.indexOf(state.hz)+(e.key==='ArrowRight'?1:-1);if(HZ_ORDER[i]){state.hz=HZ_ORDER[i];state.sel=null;state.ins=null;render();document.getElementById('tab-'+state.hz).focus()}}});
+document.addEventListener('change',e=>{
+  const ov=e.target.dataset&&e.target.dataset.ov;if(ov){state.ov[ov]=e.target.checked;save();drawChart(current);return}
+  if(e.target.id==='ins'){state.ins=e.target.value;calc(current)}
+});
 document.addEventListener('input',e=>{
   if(e.target.id==='cap'){state.cap=Math.max(0,+e.target.value||0);save();calc(current)}
   if(e.target.id==='rp'){state.riskPct=Math.max(0,+e.target.value||0);save();calc(current)}
 });
+// redraw chart colors when the theme changes
+try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>drawChart(current))}catch(_){}
+new MutationObserver(()=>drawChart(current)).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
 
-renderStrip();render();
+renderStrip();renderMethod();render();
 })();
 </script>
