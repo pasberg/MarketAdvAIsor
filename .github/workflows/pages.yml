@@ -6,6 +6,8 @@ name: Pages
 #   hour   at :01 and :31 in the same window
 #   daily  15:50 and 20:35 (after the Stockholm and US closes) and on every push/manual run
 # Scheduled runs can start several minutes late when GitHub is busy.
+# Login: the data files are encrypted for the users in the SITE_USERS secret
+# (one "user:password" per line); see pipeline/encrypt_data.py.
 
 on:
   push:
@@ -63,16 +65,31 @@ jobs:
         if: github.event_name != 'schedule'
         run: python -m unittest discover -s tests -t .
 
-      - name: Keep data parts from the previous deploy
-        run: |
-          mkdir -p site/data
-          if git ls-remote --exit-code --heads origin gh-pages >/dev/null; then
-            git fetch --depth=1 origin gh-pages
-            git archive FETCH_HEAD data | tar -x -C site || true
-          fi
+      # Plain data lives only in the Actions cache (not public); the site gets encrypted copies.
+      - name: Restore data from earlier runs
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: data-${{ github.run_id }}
+          restore-keys: data-
 
       - name: Fetch prices
-        run: python pipeline/fetch_market_data.py --out-dir site/data --parts "${{ steps.parts.outputs.parts }}"
+        run: |
+          parts="${{ steps.parts.outputs.parts }}"
+          # a part that was never fetched (empty cache) is fetched now as well
+          for p in intra hour daily; do [ -f "data/$p.json" ] || parts="$parts,$p"; done
+          python pipeline/fetch_market_data.py --out-dir data --parts "$parts"
+
+      - name: Save data for later runs
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: data-${{ github.run_id }}
+
+      - name: Encrypt data
+        env:
+          SITE_USERS: ${{ secrets.SITE_USERS }}
+        run: python pipeline/encrypt_data.py --src data --dst site/data
 
       - name: Build page
         run: python pipeline/build_site.py --src mockup/index.html --out site/index.html

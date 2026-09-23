@@ -258,6 +258,22 @@ table.wl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
 .wt td.hi{font-weight:600;color:var(--accent)}
 .disc{margin-top:24px;padding-top:16px;border-top:1px solid var(--line);font-size:12px;color:var(--faint)}
 
+/* login gate */
+body.locked .top,body.locked main{filter:blur(7px) saturate(.7);pointer-events:none;user-select:none}
+.gate{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:16px;background:color-mix(in srgb,var(--bg) 45%,rgba(8,14,12,.55))}
+.login{width:100%;max-width:360px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:26px 24px 22px;display:grid;gap:14px}
+.login .brand{font-size:19px}
+.login h2{font-family:var(--display);font-size:22px;letter-spacing:-.02em;margin:4px 0 0}
+.login p{margin:0;color:var(--muted);font-size:13px}
+.login label{display:grid;gap:5px;font-size:12.5px;font-weight:500;color:var(--muted)}
+.login input[type=text],.login input[type=password]{font:15px var(--body);padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink)}
+.login input:focus{border-color:var(--accent);outline:2px solid var(--accent-soft);outline-offset:0}
+.login .rem{display:flex;align-items:center;gap:8px;font-weight:400;color:var(--ink);font-size:13px}
+.login .rem input{accent-color:var(--accent);margin:0}
+.login button{font:600 14px var(--body);padding:11px;border:0;border-radius:9px;background:var(--accent);color:var(--accent-ink);cursor:pointer}
+.login button:disabled{opacity:.6;cursor:progress}
+.login .err{color:var(--down);font-size:13px;min-height:1.2em}
+.logout{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;color:var(--muted)}
 @media (max-width:1100px){
   .layout{grid-template-columns:1fr}
   .picks{position:static}
@@ -293,6 +309,7 @@ table.wl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
     <div class="top-meta">
       <span class="live" id="upd"><i></i>Exempeldata · ons 23 sep 2026 15:50</span>
       <span class="badge-demo" id="badge">Mockup · exempeldata</span>
+      <button class="logout" id="logout" type="button" hidden>Logga ut</button>
     </div>
   </div>
 </header>
@@ -339,8 +356,20 @@ table.wl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
   <p class="disc">Mockup med fiktiva kurser och analyser. Inget innehåll utgör investeringsrådgivning. Hävstångsprodukter kan förlora hela sitt värde snabbt. Historisk avkastning är ingen garanti för framtida avkastning. Länkar till Avanza, TradingView och MarketWatch är genvägar till respektive sajt; mockupen har ingen koppling till dem. Grafer: TradingView Lightweight Charts™.</p>
 </main>
 
+<div class="gate" id="gate" hidden>
+  <form class="login" id="login" autocomplete="on">
+    <div class="brand"><span>MarketAdv<b>AI</b>sor</span></div>
+    <div><h2>Logga in</h2><p id="login-msg">Analyserna och kursdatan är bara tillgängliga för inloggade.</p></div>
+    <label for="lg-user">Användarnamn<input id="lg-user" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+    <label for="lg-pass">Lösenord<input id="lg-pass" name="password" type="password" autocomplete="current-password" required></label>
+    <label class="rem" for="lg-rem"><input id="lg-rem" type="checkbox">Kom ihåg mig på den här enheten</label>
+    <div class="err" id="lg-err" role="alert"></div>
+    <button type="submit" id="lg-btn">Logga in</button>
+  </form>
+</div>
 <script>
 (()=>{
+document.body.classList.add('locked'); // blurred until the login check has run
 const HZ = {
   intradag:{t:'Intradag', kind:'intra', valid:'Stängs samma dag', vol:.012, n:64, fwd:14, w:[.30,.02,.13,.30,.15,.10],
     sub:'Positioner som öppnas och stängs samma handelsdag — inget hålls över natten. Kort rörelse, snäva stopp: här gör bull/bear-certifikat och mini futures nytta.',
@@ -1064,24 +1093,101 @@ function updateAge(){
   const ago=min<1?'nyss':min<60?`${min} min sedan`:min<1440?`${Math.floor(min/60)} h sedan`:`${Math.floor(min/1440)} d sedan`;
   document.getElementById('upd').innerHTML=`<i${min>20?' style="background:var(--warn);box-shadow:0 0 0 3px var(--warn-soft)"':''}></i>Kurser ${fmtClock(g)} (${ago}) · Norden ~15 min fördröjd`;
 }
+// ---------- login: data files on the public site are encrypted (see pipeline/encrypt_data.py)
+const AUTH_STORE='maa-auth';
+const te=new TextEncoder(),subtle=window.crypto&&crypto.subtle;
+const b64d=x=>Uint8Array.from(atob(x),c=>c.charCodeAt(0)),b64e=u=>btoa(String.fromCharCode(...new Uint8Array(u)));
+const sha=async x=>new Uint8Array(await subtle.digest('SHA-256',te.encode(x)));
+const hex=u=>[...u].map(x=>x.toString(16).padStart(2,'0')).join('');
+let session=null; // {uid, kek: base64 raw key}
+function readSession(){for(const st of [sessionStorage,localStorage]){try{const v=JSON.parse(st.getItem(AUTH_STORE)||'null');if(v&&v.uid&&v.kek)return v}catch(e){}}return null}
+function saveSession(v,remember){try{(remember?localStorage:sessionStorage).setItem(AUTH_STORE,JSON.stringify(v))}catch(e){}}
+function clearSession(){session=null;for(const st of [sessionStorage,localStorage]){try{st.removeItem(AUTH_STORE)}catch(e){}}}
+async function deriveKek(user,pass,auth){
+  const u=user.trim().toLowerCase(),salt=(await sha(auth.saltPrefix+u)).slice(0,16);
+  const base=await subtle.importKey('raw',te.encode(pass),'PBKDF2',false,['deriveBits']);
+  const raw=await subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt,iterations:auth.iterations},base,256);
+  return {uid:hex(await sha(u)),kek:b64e(raw)};
+}
+async function openBox(keyRaw,box){
+  const k=await subtle.importKey('raw',keyRaw,'AES-GCM',false,['decrypt']);
+  return subtle.decrypt({name:'AES-GCM',iv:b64d(box.iv)},k,b64d(box.ct));
+}
+async function unwrapDek(auth,sess){
+  const box=sess&&auth.users[sess.uid];if(!box)return null;
+  try{return await openBox(b64d(sess.kek),box)}catch(e){return null}
+}
+function showGate(msg,err){
+  document.body.classList.add('locked');
+  document.querySelector('.top').setAttribute('aria-hidden','true');document.getElementById('top').setAttribute('aria-hidden','true');
+  document.getElementById('gate').hidden=false;
+  if(msg)document.getElementById('login-msg').textContent=msg;
+  document.getElementById('lg-err').textContent=err||'';
+  setTimeout(()=>{try{document.getElementById(document.getElementById('lg-user').value?'lg-pass':'lg-user').focus()}catch(e){}},50);
+}
+function hideGate(){
+  document.body.classList.remove('locked');
+  document.querySelector('.top').removeAttribute('aria-hidden');document.getElementById('top').removeAttribute('aria-hidden');
+  document.getElementById('gate').hidden=true;
+}
+document.getElementById('login').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const btn=document.getElementById('lg-btn'),err=document.getElementById('lg-err');
+  if(!subtle){err.textContent='Webbläsaren saknar stöd för kryptering (kräver https).';return}
+  btn.disabled=true;btn.textContent='Loggar in…';err.textContent='';
+  try{
+    const auth=await getJSON(dataBase+'auth.json');
+    if(!auth){err.textContent='Kunde inte nå servern. Försök igen.';return}
+    const sess=await deriveKek(document.getElementById('lg-user').value,document.getElementById('lg-pass').value,auth);
+    if(!await unwrapDek(auth,sess)){err.textContent='Fel användarnamn eller lösenord.';document.getElementById('lg-pass').select();return}
+    session=sess;saveSession(sess,document.getElementById('lg-rem').checked);
+    document.getElementById('lg-pass').value='';
+    hideGate();document.getElementById('logout').hidden=false;
+    loadedAt=0;await loadData();
+  }finally{btn.disabled=false;btn.textContent='Logga in'}
+});
+document.getElementById('logout').addEventListener('click',()=>{clearSession();location.reload()});
+
+let dataBase='data/';
+async function fetchParts(base,auth){
+  if(!auth)return mergeParts(await Promise.all(['intra','hour','daily'].map(p=>getJSON(base+p+'.json'))))||mergeParts([await getJSON(base+'market.json')]);
+  const dekRaw=await unwrapDek(auth,session);
+  if(!dekRaw)return 'locked';
+  const boxes=await Promise.all(['intra','hour','daily'].map(p=>getJSON(base+p+'.enc.json')));
+  const parts=await Promise.all(boxes.map(async bx=>{if(!bx)return null;try{return JSON.parse(new TextDecoder().decode(await openBox(dekRaw,bx)))}catch(e){return null}}));
+  return mergeParts(parts);
+}
 async function loadData(){
   if(loading)return;loading=true;
   try{
     for(const base of ['data/','../data/']){
-      let d=mergeParts(await Promise.all(['intra','hour','daily'].map(p=>getJSON(base+p+'.json'))));
-      if(!d)d=mergeParts([await getJSON(base+'market.json')]);
-      if(!d)continue;
-      const changed=!REAL||REAL.generated!==d.generated||JSON.stringify(REAL.parts)!==JSON.stringify(d.parts);
-      REAL=d;loadedAt=Date.now();
-      if(changed){
-        for(const [sym,x] of Object.entries(d.symbols)){if(T[sym]&&x.last){T[sym][3]=x.last;if(x.prevClose)T[sym][4]=(x.last/x.prevClose-1)*100}}
-        for(const k in cache)delete cache[k];
-        const b=document.getElementById('badge');b.textContent='Riktig kursdata · case-texter exempel';b.classList.add('ok');
-        renderStrip();render();
+      const auth=subtle?await getJSON(base+'auth.json'):null;
+      if(auth){
+        dataBase=base;
+        if(!Object.keys(auth.users||{}).length){showGate('Inga konton är skapade än. Kontakta den som driver sajten.');return}
+        session=session||readSession();
+        const d=await fetchParts(base,auth);
+        if(d==='locked'){const had=!!session;clearSession();showGate(null,had?'Inloggningen gäller inte längre — logga in igen.':'');return}
+        document.getElementById('logout').hidden=false;hideGate();
+        if(d)applyData(d);
+        return;
       }
-      updateAge();return;
+      const d=await fetchParts(base,null);
+      if(d){hideGate();applyData(d);return}
     }
+    hideGate();
   }finally{loading=false}
+}
+function applyData(d){
+  const changed=!REAL||REAL.generated!==d.generated||JSON.stringify(REAL.parts)!==JSON.stringify(d.parts);
+  REAL=d;loadedAt=Date.now();
+  if(changed){
+    for(const [sym,x] of Object.entries(d.symbols)){if(T[sym]&&x.last){T[sym][3]=x.last;if(x.prevClose)T[sym][4]=(x.last/x.prevClose-1)*100}}
+    for(const k in cache)delete cache[k];
+    const b=document.getElementById('badge');b.textContent='Riktig kursdata · case-texter exempel';b.classList.add('ok');
+    renderStrip();render();
+  }
+  updateAge();
 }
 loadData();
 // Re-check for new data every 5 minutes while the page is visible; keep the age label current.
