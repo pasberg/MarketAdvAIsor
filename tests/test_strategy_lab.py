@@ -43,6 +43,27 @@ class Lab(unittest.TestCase):
         self.assertEqual(len(res["champion"]["signals"]), 6)
         self.assertEqual(res["configs_tested"], sum(len(f["grid"]) for f in lab.FAMILIES.values()))
 
+    def test_long_short_profits_from_a_fall_and_pays_short_cost(self):
+        rng = np.random.default_rng(2)
+        up = np.cumprod(1 + rng.normal(0.001, 0.01, 400)) * 100
+        down = up[-1] * np.cumprod(1 + rng.normal(-0.003, 0.01, 400))
+        prices = {f"S{i}": frame(np.concatenate([up, down]) * (1 + i / 10)) for i in range(4)}
+        ls, pos = lab.strategy_returns(prices, lab.price_sma_ls, {"n": 100}, cost_pct=0.1)
+        lo, _ = lab.strategy_returns(prices, lab.price_sma, {"n": 100}, cost_pct=0.1)
+        fall = slice(pos.index[500], pos.index[-1])
+        self.assertGreater(lab.portfolio(ls).loc[fall].sum(), lab.portfolio(lo).loc[fall].sum())
+        self.assertIn(-1.0, set(pos.iloc[-1]))
+        # a flat market: holding a short costs the yearly short fee
+        flat = {"X": frame([100.0] * 300)}
+        r, _ = lab.strategy_returns(flat, lambda d: pd.Series(-1.0, index=d.index), {}, cost_pct=0)
+        self.assertAlmostEqual(r["X"].iloc[1:].sum(), -lab.SHORT_COST_PCT_YEAR / 100 / lab.YEAR * 299)
+
+    def test_hold_ls(self):
+        idx = pd.RangeIndex(6)
+        b = lambda v: pd.Series(v, index=idx).astype(bool)
+        pos = lab.hold_ls(b([1, 0, 0, 0, 0, 0]), b([0, 0, 1, 0, 0, 0]), b([0, 0, 0, 1, 0, 0]), b([0, 0, 0, 0, 0, 1]))
+        self.assertEqual(list(pos), [1, 1, 0, -1, -1, 0])
+
     def test_rotation_holds_the_strongest(self):
         n = 300
         strong = frame(100 * np.cumprod(np.full(n, 1.002)))

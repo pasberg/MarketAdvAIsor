@@ -14,7 +14,8 @@ och lägg gärna till nya idéer längst ned.
   Lägg till ett test som visar det när strategin använder rullande fönster eller `shift`.
 - **Små parameterrutnät: högst 4 varianter per strategi.** Varje extra variant ökar risken att
   något ser bra ut av slump. Välj etablerade standardvärden från litteraturen, inte finjusterade tal.
-- Endast köp/stå utanför (ingen blankning) om inte punkten säger annat.
+- Endast köp/stå utanför om inte punkten säger annat. Blankande strategier markeras `short=True`,
+  returnerar −1 för kort position och betalar `SHORT_COST_PCT_YEAR`.
 - Ändra inte kostnadsmodellen, utvärderingen (`run`, `walk_forward`, `metrics`) eller de
   live-regler som sajten visar (`mockup/analysis.js`) utan att punkten uttryckligen säger det.
 - Alla tester ska gå igenom: `python -m unittest discover -s tests -t .`
@@ -43,3 +44,5 @@ och lägg gärna till nya idéer längst ned.
 
 - [x] Köp och behåll, Faber, medelvärdeskorsning, Donchian, tidsseriemomentum, MACD, RSI(2),
       Bollinger, 52-veckorshögsta, ATR-stop, relativ styrka (rotation).
+- [x] Köp/blanka-versioner: pris mot medelvärde, medelvärdeskorsning, tidsseriemomentum,
+      Donchian och RSI(2), med årlig kostnad för korta positioner (`SHORT_COST_PCT_YEAR`).

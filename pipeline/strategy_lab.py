@@ -1,7 +1,8 @@
 """Strategy lab: test established trading strategies on the fetched history, honestly.
 
-Every strategy family has a small parameter grid. All strategies are long-only, trade at
-the close after the signal (no look-ahead) and pay a cost on every position change.
+Every strategy family has a small parameter grid. Strategies are long-only unless marked
+`short=True` (then they also short, paying a yearly short cost). All trade at the close after
+the signal (no look-ahead) and pay a cost on every position change.
 Results are measured three ways:
 
 - train / test: best parameters picked on the first 60 % of the period, reported on the last 40 %
@@ -28,6 +29,7 @@ import pandas as pd
 
 YEAR = 252
 COST_PCT = 0.15  # % of the position, round trip (spread + courtage)
+SHORT_COST_PCT_YEAR = 3.0  # yearly cost of holding a short (bear certificate / mini short financing, borrow fee)
 
 
 # ---------- indicators ----------
@@ -62,7 +64,23 @@ def hold(entry: pd.Series, exit_: pd.Series) -> pd.Series:
     return pd.Series(pos, index=entry.index)
 
 
-# ---------- strategies: (df with o,h,l,c) -> position 0/1 at the close ----------
+def hold_ls(long_in, long_out, short_in, short_out) -> pd.Series:
+    """Long/short position from entry/exit conditions (1 long, -1 short, 0 flat)."""
+    li, lo, si, so = (x.fillna(False).to_numpy() for x in (long_in, long_out, short_in, short_out))
+    pos = np.zeros(len(li))
+    for i in range(len(li)):
+        prev = pos[i - 1] if i else 0
+        if prev == 1 and lo[i]:
+            prev = 0
+        elif prev == -1 and so[i]:
+            prev = 0
+        if prev == 0:
+            prev = 1 if li[i] else (-1 if si[i] else 0)
+        pos[i] = prev
+    return pd.Series(pos, index=long_in.index)
+
+
+# ---------- strategies: (df with o,h,l,c) -> position at the close (1 long, 0 flat, -1 short) ----------
 def buy_hold(df):
     return pd.Series(1.0, index=df.index)
 
@@ -110,6 +128,30 @@ def chandelier(df, mult):
     return hold((df.c > ema(df.c, 50)) & (df.c >= df.h.rolling(20).max().shift(1)), df.c < hh - mult * a)
 
 
+# long/short versions: short when the long rule says "out"
+def price_sma_ls(df, n):
+    return np.sign(df.c - sma(df.c, n)).fillna(0.0)
+
+
+def sma_cross_ls(df, fast, slow):
+    return np.sign(sma(df.c, fast) - sma(df.c, slow)).fillna(0.0)
+
+
+def tsmom_ls(df, lookback):
+    return np.sign(df.c / df.c.shift(lookback) - 1).fillna(0.0)
+
+
+def donchian_ls(df, n, m):
+    hi_n, lo_n = df.h.rolling(n).max().shift(1), df.l.rolling(n).min().shift(1)
+    hi_m, lo_m = df.h.rolling(m).max().shift(1), df.l.rolling(m).min().shift(1)
+    return hold_ls(df.c >= hi_n, df.c <= lo_m, df.c <= lo_n, df.c >= hi_m)
+
+
+def rsi2_ls(df, threshold):
+    r, trend, s5 = rsi(df.c, 2), sma(df.c, 200), sma(df.c, 5)
+    return hold_ls((r < threshold) & (df.c > trend), df.c > s5, (r > 100 - threshold) & (df.c < trend), df.c < s5)
+
+
 # ---------- rotation strategies: (dict of all prices) -> DataFrame of positions ----------
 STOCKS_ONLY = {"OMXS30", "SPX", "NDX100", "GOLD", "SILVER", "COPPER", "BRENT"}
 
@@ -153,6 +195,16 @@ FAMILIES = {
                          term="Medel–lång", fn=breakout_52w, grid=[{"exit_n": n} for n in (20, 50)]),
     "chandelier": dict(name="Trend med ATR-stop", desc="Köper utbrott i upptrend, följer med en stop 2,5–3,5 ATR under toppen",
                        term="Medel", fn=chandelier, grid=[{"mult": m} for m in (2.5, 3.5)]),
+    "price_sma_ls": dict(name="Pris mot medelvärde, köp/blanka", desc="Köpt över medelvärdet, blankad under", term="Lång",
+                         short=True, fn=price_sma_ls, grid=[{"n": n} for n in (50, 100, 200)]),
+    "sma_cross_ls": dict(name="Medelvärdeskorsning, köp/blanka", desc="Köpt när korta medelvärdet ligger över det långa, blankad annars",
+                         term="Medel–lång", short=True, fn=sma_cross_ls, grid=[{"fast": f, "slow": s} for f, s in ((20, 100), (50, 200))]),
+    "tsmom_ls": dict(name="Tidsseriemomentum, köp/blanka", desc="Köpt efter uppgång, blankad efter nedgång (managed futures/CTA)",
+                     term="Medel–lång", short=True, fn=tsmom_ls, grid=[{"lookback": n} for n in (63, 126, 252)]),
+    "donchian_ls": dict(name="Donchian, köp/blanka", desc="Köper nytt högsta och blankar nytt lägsta (Turtle åt båda håll)",
+                        term="Medel", short=True, fn=donchian_ls, grid=[{"n": n, "m": m} for n, m in ((20, 10), (55, 20))]),
+    "rsi2_ls": dict(name="RSI(2), köp/blanka", desc="Köper översålt i upptrend, blankar överköpt i nedtrend (kort sikt)",
+                    term="Kort", short=True, fn=rsi2_ls, grid=[{"threshold": t} for t in (5, 10)]),
     "xs_momentum": dict(name="Relativ styrka (rotation)", desc="Äger varje månad de aktier som gått bäst senaste halvåret/året, om uppgången är positiv",
                         term="Medel–lång", fn=xs_momentum, portfolio=True,
                         grid=[{"lookback": lb, "top": k} for lb in (126, 252) for k in (5, 10)]),
@@ -192,7 +244,9 @@ def strategy_returns(prices: dict[str, pd.DataFrame], fn, params: dict, cost_pct
         pos = fn(df, **params).reindex(df.index).fillna(0.0)
         r = df.c.pct_change().fillna(0.0)
         turn = pos.diff().abs().fillna(pos.abs())
-        rets[sym] = pos.shift(1).fillna(0.0) * r - turn.shift(1).fillna(0.0) * cost_pct / 100 / 2
+        held = pos.shift(1).fillna(0.0)
+        short_cost = (held < 0) * SHORT_COST_PCT_YEAR / 100 / YEAR
+        rets[sym] = held * r - turn.shift(1).fillna(0.0) * cost_pct / 100 / 2 - short_cost
         poss[sym] = pos
     return pd.DataFrame(rets), pd.DataFrame(poss)
 
@@ -214,7 +268,8 @@ def metrics(r: pd.Series, pos: pd.DataFrame | None = None) -> dict:
            "mdd": ((eq / eq.cummax()) - 1).min() * 100, "total": (eq.iloc[-1] - 1) * 100, "days": len(r)}
     if pos is not None:
         p = pos.loc[r.index]
-        out["exposure"] = float(p.mean().mean() * 100)
+        out["exposure"] = float(p.abs().mean().mean() * 100)
+        out["short"] = float((p < 0).mean().mean() * 100)
         out["trades_per_year"] = float((p.diff().clip(lower=0).sum().sum()) / max(p.shape[1], 1) / years)
     return {k: round(float(v), 3) for k, v in out.items()}
 
@@ -281,18 +336,18 @@ def run(prices: dict[str, pd.DataFrame], cost_pct: float = COST_PCT) -> dict:
                 continue
             pos = (rot[sym] > 0).astype(int).reindex(df.index).ffill().fillna(0)
         else:
-            pos = fam["fn"](df, **last["params"]).reindex(df.index).fillna(0)
+            pos = fam["fn"](df, **last["params"]).reindex(df.index).fillna(0).astype(int)
         changes = pos.ne(pos.shift())
         signals.append({"sym": sym, "pos": int(pos.iloc[-1]), "since": str(changes[changes].index[-1].date())})
     bh_r = per_family["buy_hold"][0][1]
     monthly = lambda r: [{"t": str(d.date()), "v": round(float(v), 4)} for d, v in (1 + r).cumprod().resample("ME").last().items()]
     return {
-        "universe": len(prices), "cost_pct": cost_pct, "configs_tested": len(all_cands),
+        "universe": len(prices), "cost_pct": cost_pct, "short_cost_pct_year": SHORT_COST_PCT_YEAR, "configs_tested": len(all_cands),
         "period": {"start": str(index[0].date()), "split": str(index[split].date()), "wf_start": str(index[start].date()), "end": str(index[-1].date())},
         "families": sorted(fams, key=lambda f: -f["wf"].get("sharpe", -9)),
         "benchmark": {"train": bh["best"]["train"], "test": bh["best"]["test"], "wf": metrics(bh_r.iloc[start:])},
         "champion": {"family": last["family"], "name": fam["name"], "params": last["params"], "wf": metrics(champ_r),
-                     "picks": champ_picks, "signals": sorted(signals, key=lambda s: (-s["pos"], s["sym"]))},
+                     "picks": champ_picks, "signals": sorted(signals, key=lambda s: (-abs(s["pos"]), -s["pos"], s["sym"]))},
         "curves": {"champion": monthly(champ_r), "benchmark": monthly(bh_r.iloc[start:])},
     }
 
