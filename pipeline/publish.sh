@@ -8,9 +8,14 @@ parts="${1:-intra,hour,daily}"
 for p in intra hour daily; do [ -f "data/$p.json" ] || parts="$parts,$p"; done
 python pipeline/fetch_market_data.py --out-dir data --parts "$parts"
 
+# log today's recommendations and follow up earlier ones (history survives a lost cache)
+(cd pipeline && python restore_log.py ../data/log.json) || echo "::warning::Kunde inte återställa loggen"
+node pipeline/log_picks.js --data data --page mockup/index.html || echo "::warning::Loggningen misslyckades"
+
 rm -rf site
 python pipeline/encrypt_data.py --src data --dst site/data
 python pipeline/build_site.py --src mockup/index.html --out site/index.html
+cp mockup/analysis.js site/analysis.js
 
 cd site
 git init -q -b gh-pages

@@ -3,6 +3,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.2.1/dist/lightweight-charts.standalone.production.js"></script>
+<script src="analysis.js"></script>
 <style>
 :root{
   --bg:#EBEFED; --surface:#FFFFFF; --surface-2:#F4F7F5; --ink:#13201C; --muted:#5A6863; --faint:#8A9793;
@@ -262,7 +263,16 @@ table.wl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
 /* backtest */
 .bt{margin-top:18px}
 .bt-bar{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between}
-.bt-intro{margin:0;color:var(--muted);max-width:78ch;font-size:13.5px}
+.bt-intro{margin:0;color:var(--muted);max-width:70ch;font-size:13.5px}
+.bt-ctl{display:flex;flex-wrap:wrap;gap:10px}
+.bt-tabs{display:inline-flex;gap:4px;padding:4px;background:var(--surface);border:1px solid var(--line);border-radius:11px;margin-bottom:14px}
+.bt-tabs button{border:0;background:transparent;border-radius:8px;padding:7px 14px;font-weight:600;font-size:13px;cursor:pointer;color:var(--muted)}
+.bt-tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
+.vt td.best{font-weight:600}
+.vt tr.sel td{background:var(--accent-soft)}
+.vt tbody tr{cursor:pointer}
+.bench{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:10px}
+.st.open{background:var(--accent-soft);color:var(--accent)}
 .bt-f{display:grid;gap:4px;font-size:12px;color:var(--muted);font-weight:500}
 .bt-f select{font:500 14px var(--body);padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)}
 .kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:16px}
@@ -367,11 +377,23 @@ body.locked .top,body.locked main{filter:blur(7px) saturate(.7);pointer-events:n
   </div>
 
   <section class="bt" id="bt" hidden>
+    <div class="bt-tabs" role="tablist" aria-label="Uppföljning">
+      <button role="tab" id="bt-tab-sim" data-bttab="sim" aria-selected="true">Historisk simulering</button>
+      <button role="tab" id="bt-tab-log" data-bttab="log" aria-selected="false">Loggade förslag</button>
+    </div>
     <div class="bt-bar">
-      <p class="bt-intro">Samma regler som sätter dagens nivåer körs bakåt i tiden, stapel för stapel och bara med den data som fanns då. Varje signal följs tills stop loss, målen eller tidsgränsen nås. ⅓ av positionen säljs vid varje TP.</p>
-      <label class="bt-f" for="bt-min">Minsta poäng
-        <select id="bt-min"><option value="0">Alla signaler</option><option value="60">60</option><option value="65" selected>65</option><option value="70">70</option><option value="75">75</option></select>
-      </label>
+      <p class="bt-intro" id="bt-intro"></p>
+      <div class="bt-ctl">
+        <label class="bt-f" for="bt-var">Regler
+          <select id="bt-var"></select>
+        </label>
+        <label class="bt-f" for="bt-cost">Kostnad tur och retur
+          <select id="bt-cost"><option value="auto" selected>Standard för horisonten</option><option value="0">Ingen</option><option value="0.05">0,05 %</option><option value="0.1">0,10 %</option><option value="0.15">0,15 %</option><option value="0.25">0,25 %</option><option value="0.5">0,50 %</option></select>
+        </label>
+        <label class="bt-f" for="bt-min">Minsta poäng
+          <select id="bt-min"><option value="0">Alla signaler</option><option value="60">60</option><option value="65" selected>65</option><option value="70">70</option><option value="75">75</option></select>
+        </label>
+      </div>
     </div>
     <div id="bt-out"></div>
   </section>
@@ -395,6 +417,87 @@ body.locked .top,body.locked main{filter:blur(7px) saturate(.7);pointer-events:n
   <p class="disc">Mockup med fiktiva kurser och analyser. Inget innehåll utgör investeringsrådgivning. Hävstångsprodukter kan förlora hela sitt värde snabbt. Historisk avkastning är ingen garanti för framtida avkastning. Länkar till Avanza, TradingView och MarketWatch är genvägar till respektive sajt; mockupen har ingen koppling till dem. Grafer: TradingView Lightweight Charts™.</p>
 </main>
 
+<script type="application/json" id="cases">
+{"intradag":{"top":[["OMXS30","L",0.5,"Öppningsrekyl mot VWAP","Indexet öppnade starkt på bred uppgång i verkstad och banker. Förmiddagens rekyl har stannat vid VWAP och 50 %-nivån — köpläge med tydlig stopp under dagens låga.",[80,60,70,78,80,72],"Amerikansk öppning kl. 15:30 kan ge snabba svängningar. Stäng senast 17:25."],
+["GOLD","L",0.382,"Trendfortsättning","Guldet fortsätter uppåt på svagare dollar och fallande realräntor. Rekylen under Asien-handeln stannade vid 38,2 % och VWAP.",[78,70,72,76,78,70],"Amerikansk inflationsdata och dollarn styr. Certifikathandeln stänger 22:00."],
+["NVDA","L",0.5,"ORB-utbrott · VWAP-rekyl","Öppningsintervallet 15:30–15:35 bröts uppåt på 1,8× normal volym. Rekylen landar nu i VWAP, som sammanfaller med 50 %-retracement av öppningsimpulsen — en andra-chans-entry med halvledarsektorn som medvind.",[84,60,74,86,80,78],"Makrodata kl. 16:00 kan vända hela sektorn. Positionen stängs senast 21:55 oavsett utfall."],
+["VOLV-B","L",0.382,"Gap-and-go","Gap upp efter stark orderingång i Nordamerika. Rekylerna under dagen har hållit ovanför gårdagens högsta och 38,2 %-nivån — köparna försvarar gapet inför den amerikanska öppningen.",[82,70,72,80,78,74],"Gapet kan fyllas om OMXS30 tappar 2 690. Stäng senast 17:25."],
+["TSLA","S",0.618,"Misslyckat utbrott","Försöket över förmarknadens högsta misslyckades direkt efter öppning på fallande volym, och RSI visar bearish divergens på 1 min. Priset är under VWAP; rekylen upp mot 61,8 % är ett säljläge.",[78,45,70,82,76,72],"Hög blankningsgrad ger risk för snabba squeezar. Håll stoppen strikt."],
+["NOVO-B","L",0.5,"Reversal vid pivot S1","Efter tre dagars nedgång bildades en hammare på 15 min exakt vid dagens pivot S1. Relativ styrka mot OMXC25 vänder upp och säljvolymen torkar ut.",[76,62,68,78,82,70],"Köpenhamn stänger redan 17:00 — kort tidsfönster. Nyheter om läkemedelspriser i USA kan ge snabba ras."],
+["JPM","L",0.382,"Bull flag över VWAP","Bankerna leder efter räntedata kl. 14:30. Flaggformation på 1 min ovanför VWAP; utbrott ur flaggan ger mål i nivå med dagens förväntade range.",[80,66,64,76,72,70],"Svag kreditdata från regionbanker kan dra ned sektorn."]],"watch":[["NDX100","S",0.5,"Utsträckt öppning","Säljläge om öppningens topp inte tas ut första halvtimmen.",[62,56,60,66,62,58],"wait"],
+["BRENT","S",0.382,"Lagerdata","Trigger efter lagersiffrorna kl. 16:30 om de visar uppbyggnad.",[64,58,60,66,64,56],"build"],
+["AMD","L",0.5,"Triangel från förmarknaden","Trigger vid 1-minutsstängning över triangelns överkant med volym.",[72,55,62,74,66,64],"near"],
+["ERIC-B","S",0.382,"Lägre topp","Säljläge om motståndet vid förmiddagens topp håller.",[66,48,60,64,62,58],"wait"],
+["NDA-SE","S",0.5,"Svag relativ styrka","Nordiska banker släpar — trigger vid brott av dagens botten.",[64,52,58,70,60,56],"near"],
+["AAPL","L",0.618,"Range-botten","Handlas i förmarknadens range; köp först vid återtag av VWAP.",[60,64,56,58,64,60],"wait"],
+["SAAB-B","L",0.382,"Momentumfortsättning","Stark trend men RSI 76 — vänta på en andningspaus.",[74,68,66,62,60,70],"build"],
+["META","L",0.5,"Inside day","Utbrott ur gårdagens range är trigger.",[68,70,60,66,62,64],"wait"]]},"vecka":{"top":[["SILVER","L",0.5,"Flaggutbrott","Silvret bröt ur en veckolång flagga på stigande volym. Retesten landar i 50 % och EMA 20 på timgrafen — solpanelsefterfrågan ger stöd.",[80,72,74,78,78,70],"Silver svänger ungefär dubbelt så mycket som guld — anpassa storleken."],
+["SPX","L",0.382,"Rekyl i upptrend","Bredden förbättras och indexet rekylerar kontrollerat till 38,2 % inför centralbanksbeskedet.",[78,74,68,72,74,68],"Räntebesked från Fed kan ge ett snabbt omslag."],
+["AVGO","L",0.382,"Våg 3-fortsättning","Nya AI-kontrakt driver en tydlig våg 3 på timgrafen. Rekylen stannade vid 38,2 % samtidigt som OBV gör nya toppar — ackumulation, inte distribution.",[86,78,82,84,80,80],"Hög förväntan inbyggd; sektorrotation ut ur AI kan ge snabba ras."],
+["SAAB-B","L",0.5,"Rekyl i stark trend","Försvarsbudgetarna i Europa fortsätter uppåt. Aktien rekylerar till 50 % av senaste benet och 20-periods EMA — samma nivå som höll förra veckan.",[82,80,76,72,78,76],"Politisk nyhetsrisk åt båda håll; värderingen är historiskt hög."],
+["MSFT","L",0.5,"Retest av utbrott","Utbrottet över konsolideringen testas nu från ovansidan. Retesten sammanfaller med 50 %-retracement och stigande 50-periods EMA.",[80,82,72,74,76,70],"Svag guidning från molnkonkurrenter kan smitta av sig."],
+["EQNR","S",0.5,"Lägre toppar","Oljan handlas under 200-dagars glidande medelvärde och bolaget följer med. Rekylen upp mot 50 % och tidigare stöd, nu motstånd, är ett säljläge.",[78,58,74,76,74,68],"OPEC+-besked kan ge kraftiga gap uppåt i oljan."],
+["CAT","L",0.382,"Kanalbotten","Infrastruktur- och datacenterordrar håller i sig. Priset studsar vid kanalens botten och 38,2 %; MACD korsar upp på timgrafen.",[78,76,70,74,72,68],"Svaga PMI-siffror på fredag är största hotet."]],"watch":[["COPPER","L",0.5,"Kinastimulans","Trigger vid stängning över veckans topp.",[68,70,62,66,66,62],"near"],
+["OMXS30","L",0.382,"Range","Köp vid botten av veckans range.",[64,66,58,62,64,60],"wait"],
+["GOOGL","L",0.5,"Flagga","Trigger vid stängning över flaggans topp.",[72,80,66,68,70,66],"near"],
+["ATCO-A","L",0.382,"Dubbelbotten","Väntar på bekräftelse över halsringningen.",[68,72,64,66,70,62],"build"],
+["DSV","S",0.5,"Lägre topp","Fraktpriser faller — säljläge vid retest av brutet stöd.",[66,60,62,64,64,58],"wait"],
+["AMZN","L",0.618,"Djup rekyl","61,8 % är sista försvarslinjen för upptrenden.",[62,78,58,60,72,62],"wait"],
+["NDA-SE","L",0.382,"Trendföljning","Stabil trend; köp vid rekyl mot EMA 20.",[70,74,62,64,66,66],"wait"],
+["LLY","L",0.5,"Kilformation","Riktningen avgörs efter FDA-besked på torsdag.",[64,82,60,62,64,68],"build"]]},"manad":{"top":[["GOLD","L",0.5,"Våg 4-rekyl","Centralbankernas köp och fallande realräntor bär trenden. Månadens rekyl har stannat vid 50 % och 50-dagars medelvärde.",[80,82,78,72,78,72],"En starkare dollar eller stigande realräntor kan pressa guldet."],
+["COPPER","L",0.382,"Utbrott ur range","Kopparlagren på LME är låga och elnätsinvesteringarna stiger. Priset bröt en tremånaders range; rekylen till 38,2 % är köpläget.",[78,76,70,74,74,66],"Svag kinesisk industridata kan vända rörelsen snabbt."],
+["META","L",0.382,"Våg 4 → våg 5","Annonsintäkterna accelererar och dagsgrafen visar en lärobokslik femvågsstruktur. Våg 4 har korrigerat 38,2 % i ett sidledes flat-mönster; våg 5 siktar mot 127,2 %-extensionen.",[84,84,86,78,82,76],"Regulatoriska besked i EU; capex-guidningen kan skrämma."],
+["ATCO-A","L",0.5,"Rekyl till stöd","Orderingången vänder upp efter fyra svaga kvartal. Rekylen möter både 50 %-retracement och det tidigare utbrottsområdet — dubbel konfluens.",[80,80,74,74,80,70],"Industrikonjunkturen i Kina är osäkerhetsfaktorn."],
+["LLY","L",0.5,"Retest av utbrott","GLP-1-volymerna överträffar förväntningarna. Utbrottet ur sexmånaders range retestas nu vid 50 %-nivån med avtagande säljvolym.",[78,88,70,72,76,74],"Prispress från amerikanska myndigheter; binär FDA-risk."],
+["NESTE","S",0.5,"Nedtrend-fortsättning","Raffinerimarginalerna för förnybar diesel pressas. Aktien gör lägre toppar och rekylerar upp mot 50 % — säljläge med tydlig invalidering.",[80,50,78,76,74,64],"Nya subventionsbeslut i EU kan vända sentimentet snabbt."],
+["INVE-B","L",0.382,"Substansrabatt + trend","Rabatten mot substansvärdet ligger över snittet samtidigt som trenden är intakt. Rekylen till 38,2 % och 50-dagars ger låg risk.",[76,82,68,70,74,68],"Följer OMXS30 tätt — en bred marknadsnedgång slår direkt."]],"watch":[["BRENT","S",0.5,"Överutbud","OPEC+ ökar produktionen — säljläge vid rekyl mot 50 %.",[64,60,62,62,66,58],"wait"],
+["NDX100","L",0.5,"Rapportsäsong","Köp vid rekyl in i rapporterna.",[70,76,64,66,66,66],"wait"],
+["NVDA","L",0.5,"Konsolidering","Tar sats inför rapport — köp vid utbrott.",[74,82,68,70,68,72],"near"],
+["ABB","L",0.382,"Test av rekordnivå","Trigger vid stängning över rekordnivån.",[76,78,66,72,64,68],"near"],
+["UNH","L",0.618,"Bottenbildning","Värderingen lockar, men trenden är inte vänd.",[58,72,60,56,70,52],"build"],
+["MOWI","L",0.5,"Säsongsmönster","Laxpriser är säsongsmässigt starka under Q4.",[64,66,58,62,66,60],"wait"],
+["COST","S",0.382,"Topp-divergens","RSI-divergens på dagsgrafen; bekräftelse saknas.",[60,66,62,58,60,56],"wait"],
+["KNEBV","L",0.5,"Range","Handlas mitt i range — bästa läge vid botten.",[58,70,56,56,62,58],"wait"]]},"kvartal":{"top":[["SPX","L",0.5,"Trend + vinsttillväxt","Vinstrevideringarna för S&P 500 pekar uppåt och räntesänkningar är inprisade. Indexets kvartalsrekyl mot 50 % och 100-dagars medelvärde har köpts upp.",[78,80,72,70,76,70],"Värderingen är hög (P/E ≈ 22); en besvikelse på vinsterna slår brett."],
+["SILVER","L",0.618,"Djup rekyl i upptrend","Industriefterfrågan överstiger utbudet för femte året. Djup rekyl till 61,8 % ger en asymmetrisk ingång.",[70,78,74,66,80,64],"Hög volatilitet — rekyler på 15–20 % är normala."],
+["GOOGL","L",0.382,"Våg 3 av (3)","Molntillväxten accelererar och sökandelen håller trots AI-konkurrens. Priset är i en utökad våg 3 där rekylen till 38,2 % har köpts upp två gånger. Lägst P/E bland megabolagen.",[82,88,84,76,80,74],"Konkurrensrättsliga beslut i USA kan tvinga fram strukturaffärer."],
+["ABB","L",0.5,"Utbrott + retest","Elektrifiering och datacenter fyller orderboken. Utbrottet ur en ettårig konsolidering retestas vid 50 % och 100-dagars glidande medelvärde.",[80,84,74,72,78,70],"Premievärdering kräver fortsatt stark orderingång."],
+["AMZN","L",0.5,"Flat-korrektion klar","AWS-marginalen når nya toppar. En flat-korrektion (a-b-c) avslutades vid 50 % och MACD på veckografen vänder upp.",[78,84,76,72,76,72],"Konsumentsvaghet under julhandeln är risken."],
+["DSV","L",0.618,"Djup våg 2","Integrationen av DB Schenker ger synergier från 2027. En djup våg 2 till 61,8 % är typisk — risk/reward är bäst just här.",[72,80,78,68,82,66],"Fraktvolymer är känsliga för tullar och handelskonflikter."],
+["XOM","S",0.382,"Distribution","IEA väntar ett oljeöverskott 2027. Distributionsmönster på veckograf och fallande relativ styrka mot S&P 500.",[76,62,72,74,70,66],"Geopolitisk upptrappning ger snabba uppgångar i oljan."]],"watch":[["GOLD","L",0.5,"Konsolidering","Köp vid utbrott ur kvartalets range.",[70,80,66,64,68,68],"build"],
+["OMXS30","L",0.382,"Cyklisk rotation","Gynnas om industrin fortsätter vända upp.",[68,74,62,64,66,62],"near"],
+["SEB-A","L",0.5,"Utdelningscase","Stabilt — väntar på rekyl mot 50 %.",[66,80,60,62,66,62],"wait"],
+["V","L",0.382,"Trend","Kvalitetsbolag; trigger vid nytt högsta.",[70,82,62,64,62,66],"near"],
+["VWS","L",0.618,"Möjlig botten","Möjlig våg C-botten — kräver bekräftelse.",[56,64,66,58,72,56],"build"],
+["ASSA-B","L",0.5,"Konsolidering","Tätt range; utbrott ger kvartalsmål.",[68,78,62,64,66,62],"build"],
+["AAPL","L",0.5,"Avvaktande","AI-cykeln för iPhone är ännu obevisad.",[60,72,58,60,64,62],"wait"],
+["SAND","L",0.382,"Cyklisk vändning","Gruvinvesteringarna tar fart.",[70,74,64,68,66,64],"near"]]},"halvar":{"top":[["COPPER","L",0.5,"Strukturellt underskott","Elektrifiering och datacenter kräver mer koppar än gruvorna hinner leverera. Veckografen visar en stigande trend; rekylen till 50 % är köpläget.",[76,86,74,68,74,66],"Global konjunkturnedgång är största risken."],
+["NDX100","L",0.5,"Veckograf: stigande kanal","AI-investeringarna driver vinsttillväxten för de största bolagen. Indexet rekylerar mot kanalens mitt.",[78,80,74,72,74,72],"Koncentrationsrisk — tio bolag står för över hälften av indexet."],
+["MSFT","L",0.5,"Veckograf: våg (3)","AI-intäkterna i Azure bär en flerårig trend. På veckografen pågår en utökad våg (3) och den senaste korrektionen landade på 50 % och 40-veckors medelvärde.",[80,90,82,72,78,74],"Capex-cykeln kan pressa fritt kassaflöde längre än väntat."],
+["NOVO-B","L",0.618,"Våg C-botten","Aktien har halverats och prisar in en utdragen priskonkurrens. En komplett a-b-c-korrektion möter 61,8 % av hela uppgången 2021–2024 — kontrarian med fundamentalt stöd (P/E ≈ 14).",[66,86,80,64,86,60],"Fortsatta marknadsandelsförluster; studiedata kan ge stora gap."],
+["ASSA-B","L",0.382,"Kvalitetstrend","Förvärvsmaskinen och prishöjningar ger jämn vinsttillväxt. Trenden på veckografen är intakt och rekylen till 38,2 % har historiskt varit ett köpläge.",[78,84,70,70,74,66],"Svag byggmarknad i Europa och USA."],
+["AVGO","L",0.5,"Stigande kanal","Egendesignade AI-chip (ASIC) blir en växande del av kundernas capex. Priset handlas i en stigande kanal på veckografen; rekylen mot kanalens mitt ger bra risk/reward.",[80,82,76,74,74,76],"Kundkoncentration — ett fåtal hyperskalare står för AI-intäkterna."],
+["SAND","L",0.5,"Omvänd huvud-skuldror","Gruvinvesteringar och verktygsvolymer vänder upp. Omvänd huvud-skuldror på veckografen; 50 %-rekylen efter utbrottet är köpläget.",[76,80,72,70,74,66],"Råvarupriser och Kinas byggsektor."]],"watch":[["BRENT","S",0.5,"Överutbud 2027","Blankningscase om lagren fortsätter byggas.",[62,62,62,60,64,56],"wait"],
+["SILVER","L",0.382,"Industrimetall","Köp vid rekyl mot 40-veckors medelvärde.",[70,78,64,64,66,64],"wait"],
+["EVO","L",0.618,"Låg värdering","P/E ≈ 11 men trenden är negativ — vänta på botten.",[50,78,58,52,70,50],"build"],
+["NOKIA","L",0.382,"Nätverkscykel","Optik till datacenter ger ny tillväxt.",[68,70,64,66,64,62],"near"],
+["HM-B","S",0.5,"Strukturell press","Marginalpress — säljläge vid rekyl.",[64,54,62,60,62,54],"wait"],
+["TSLA","S",0.382,"Värderingsrisk","Robotaxi-förväntningarna är redan prisade.",[62,44,66,60,62,64],"wait"],
+["KNEBV","L",0.5,"Kinaåterhämtning","Case om Kinas fastighetsmarknad stabiliseras.",[58,72,58,58,62,56],"build"],
+["NFLX","L",0.382,"Trend","Annonsnivån växer — trigger vid nytt högsta.",[72,80,66,70,64,68],"near"]]},"ar":{"top":[["GOLD","L",0.5,"Sekulär trend","Centralbankerna köper rekordvolymer och statsskulderna växer. Guldets flerårstrend är intakt; årets rekyl mot 50 % och 52-veckors medelvärde ger bra risk/reward.",[80,86,76,68,76,72],"Kraftigt stigande realräntor är det största hotet."],
+["OMXS30","L",0.382,"Värdering + utdelningar","Svenska storbolag handlas under sitt tioåriga P/E-snitt samtidigt som räntorna sjunker. Rekylen till 38,2 % på veckografen är köpläget.",[74,82,70,66,72,64],"Kronan och den globala konjunkturen styr."],
+["GOOGL","L",0.5,"Omvärdering","Lägst värderade megabolaget trots växande moln- och AI-intäkter. Veckografen bröt ut ur en tvåårig range; rekylen mot 50 % ger årsmålet vid 161,8 %-extensionen.",[80,90,78,72,76,72],"Antitrustprocesser och AI-konkurrens inom sök."],
+["ABB","L",0.382,"Sekulär trend","Elektrifiering, datacenter och automation ger en flerårig ordercykel. Veckografen visar en ren upptrend; rekylen till 38,2 % och 52-veckors medelvärde har varit köpläge tre gånger sedan 2020.",[80,86,76,70,74,70],"Värderingen (P/E ≈ 30) lämnar lite utrymme för besvikelser."],
+["LLY","L",0.5,"Strukturell tillväxt","GLP-1-marknaden väntas mer än fördubblas till 2030 och Lilly tar marknadsandelar. Veckografens konsolidering har brutits uppåt; 50 % är retest-zonen.",[76,90,72,70,74,72],"Prisregleringar i USA och patentutgångar på sikt."],
+["INVE-B","L",0.5,"Compounder","Investor har slagit index med bred marginal över tio år. Substansrabatten ligger över snittet och trenden på veckografen är obruten.",[76,84,70,68,72,66],"Följer den svenska börsen tätt — inget skydd vid bred nedgång."],
+["VWS","L",0.618,"Flerårig botten","Orderboken är rekordstor efter år av marginalproblem. Veckografen visar en möjlig a-b-c-botten vid 61,8 % av hela uppgången — asymmetrisk risk/reward.",[66,76,78,62,82,60],"Räntekänsligt; politisk risk kring subventioner i USA."]],"watch":[["COPPER","L",0.5,"Elektrifiering","Köp vid rekyl — långsiktigt underskott.",[70,84,66,62,68,62],"wait"],
+["SPX","L",0.5,"Brett index","Köp vid rekyl mot 40-veckors medelvärde.",[72,78,64,62,66,64],"wait"],
+["AMZN","L",0.5,"Flerårig trend","Köp vid rekyl mot 40-veckors medelvärde.",[70,84,66,64,68,66],"wait"],
+["SAAB-B","L",0.382,"Supercykel försvar","Stark men utsträckt — vänta på konsolidering.",[74,80,68,62,62,70],"build"],
+["NESTE","L",0.618,"Möjlig botten","Kontrarian — bottenbildning som kräver bekräftelse.",[52,62,64,54,72,50],"build"],
+["ASSA-B","L",0.382,"Kvalitet","Trigger vid nytt högsta på veckobasis.",[72,82,64,64,64,64],"near"],
+["XOM","S",0.5,"Oljeöverskott","Blankningscase om oljan faller under 60 USD.",[62,58,62,60,62,58],"wait"],
+["DSV","L",0.5,"Synergier","Integrationen av Schenker bär vinsttillväxten 2027–28.",[66,80,64,62,68,62],"wait"]]}}
+</script>
 <div class="gate" id="gate" hidden>
   <form class="login" id="login" autocomplete="on">
     <div class="brand"><span>MarketAdv<b>AI</b>sor</span></div>
@@ -496,110 +599,7 @@ const avzWarr=s=>`${AVZ_BASE}/borshandlade-produkter/warranter-torg/lista.html?n
 
 // top: [sym, dir, retracement, setup, thesis, scores[TA,FA,EW,MOM,FIB,SENT], risk]
 // watch: [sym, dir, retracement, setup, note, scores, status]
-const D={
-intradag:{top:[
- ['OMXS30','L',.5,'Öppningsrekyl mot VWAP','Indexet öppnade starkt på bred uppgång i verkstad och banker. Förmiddagens rekyl har stannat vid VWAP och 50 %-nivån — köpläge med tydlig stopp under dagens låga.',[80,60,70,78,80,72],'Amerikansk öppning kl. 15:30 kan ge snabba svängningar. Stäng senast 17:25.'],
- ['GOLD','L',.382,'Trendfortsättning','Guldet fortsätter uppåt på svagare dollar och fallande realräntor. Rekylen under Asien-handeln stannade vid 38,2 % och VWAP.',[78,70,72,76,78,70],'Amerikansk inflationsdata och dollarn styr. Certifikathandeln stänger 22:00.'],
- ['NVDA','L',.5,'ORB-utbrott · VWAP-rekyl','Öppningsintervallet 15:30–15:35 bröts uppåt på 1,8× normal volym. Rekylen landar nu i VWAP, som sammanfaller med 50 %-retracement av öppningsimpulsen — en andra-chans-entry med halvledarsektorn som medvind.',[84,60,74,86,80,78],'Makrodata kl. 16:00 kan vända hela sektorn. Positionen stängs senast 21:55 oavsett utfall.'],
- ['VOLV-B','L',.382,'Gap-and-go','Gap upp efter stark orderingång i Nordamerika. Rekylerna under dagen har hållit ovanför gårdagens högsta och 38,2 %-nivån — köparna försvarar gapet inför den amerikanska öppningen.',[82,70,72,80,78,74],'Gapet kan fyllas om OMXS30 tappar 2 690. Stäng senast 17:25.'],
- ['TSLA','S',.618,'Misslyckat utbrott','Försöket över förmarknadens högsta misslyckades direkt efter öppning på fallande volym, och RSI visar bearish divergens på 1 min. Priset är under VWAP; rekylen upp mot 61,8 % är ett säljläge.',[78,45,70,82,76,72],'Hög blankningsgrad ger risk för snabba squeezar. Håll stoppen strikt.'],
- ['NOVO-B','L',.5,'Reversal vid pivot S1','Efter tre dagars nedgång bildades en hammare på 15 min exakt vid dagens pivot S1. Relativ styrka mot OMXC25 vänder upp och säljvolymen torkar ut.',[76,62,68,78,82,70],'Köpenhamn stänger redan 17:00 — kort tidsfönster. Nyheter om läkemedelspriser i USA kan ge snabba ras.'],
- ['JPM','L',.382,'Bull flag över VWAP','Bankerna leder efter räntedata kl. 14:30. Flaggformation på 1 min ovanför VWAP; utbrott ur flaggan ger mål i nivå med dagens förväntade range.',[80,66,64,76,72,70],'Svag kreditdata från regionbanker kan dra ned sektorn.']],
- watch:[
- ['NDX100','S',.5,'Utsträckt öppning','Säljläge om öppningens topp inte tas ut första halvtimmen.',[62,56,60,66,62,58],'wait'],
- ['BRENT','S',.382,'Lagerdata','Trigger efter lagersiffrorna kl. 16:30 om de visar uppbyggnad.',[64,58,60,66,64,56],'build'],
- ['AMD','L',.5,'Triangel från förmarknaden','Trigger vid 1-minutsstängning över triangelns överkant med volym.',[72,55,62,74,66,64],'near'],
- ['ERIC-B','S',.382,'Lägre topp','Säljläge om motståndet vid förmiddagens topp håller.',[66,48,60,64,62,58],'wait'],
- ['NDA-SE','S',.5,'Svag relativ styrka','Nordiska banker släpar — trigger vid brott av dagens botten.',[64,52,58,70,60,56],'near'],
- ['AAPL','L',.618,'Range-botten','Handlas i förmarknadens range; köp först vid återtag av VWAP.',[60,64,56,58,64,60],'wait'],
- ['SAAB-B','L',.382,'Momentumfortsättning','Stark trend men RSI 76 — vänta på en andningspaus.',[74,68,66,62,60,70],'build'],
- ['META','L',.5,'Inside day','Utbrott ur gårdagens range är trigger.',[68,70,60,66,62,64],'wait']]},
-vecka:{top:[
- ['SILVER','L',.5,'Flaggutbrott','Silvret bröt ur en veckolång flagga på stigande volym. Retesten landar i 50 % och EMA 20 på timgrafen — solpanelsefterfrågan ger stöd.',[80,72,74,78,78,70],'Silver svänger ungefär dubbelt så mycket som guld — anpassa storleken.'],
- ['SPX','L',.382,'Rekyl i upptrend','Bredden förbättras och indexet rekylerar kontrollerat till 38,2 % inför centralbanksbeskedet.',[78,74,68,72,74,68],'Räntebesked från Fed kan ge ett snabbt omslag.'],
- ['AVGO','L',.382,'Våg 3-fortsättning','Nya AI-kontrakt driver en tydlig våg 3 på timgrafen. Rekylen stannade vid 38,2 % samtidigt som OBV gör nya toppar — ackumulation, inte distribution.',[86,78,82,84,80,80],'Hög förväntan inbyggd; sektorrotation ut ur AI kan ge snabba ras.'],
- ['SAAB-B','L',.5,'Rekyl i stark trend','Försvarsbudgetarna i Europa fortsätter uppåt. Aktien rekylerar till 50 % av senaste benet och 20-periods EMA — samma nivå som höll förra veckan.',[82,80,76,72,78,76],'Politisk nyhetsrisk åt båda håll; värderingen är historiskt hög.'],
- ['MSFT','L',.5,'Retest av utbrott','Utbrottet över konsolideringen testas nu från ovansidan. Retesten sammanfaller med 50 %-retracement och stigande 50-periods EMA.',[80,82,72,74,76,70],'Svag guidning från molnkonkurrenter kan smitta av sig.'],
- ['EQNR','S',.5,'Lägre toppar','Oljan handlas under 200-dagars glidande medelvärde och bolaget följer med. Rekylen upp mot 50 % och tidigare stöd, nu motstånd, är ett säljläge.',[78,58,74,76,74,68],'OPEC+-besked kan ge kraftiga gap uppåt i oljan.'],
- ['CAT','L',.382,'Kanalbotten','Infrastruktur- och datacenterordrar håller i sig. Priset studsar vid kanalens botten och 38,2 %; MACD korsar upp på timgrafen.',[78,76,70,74,72,68],'Svaga PMI-siffror på fredag är största hotet.']],
- watch:[
- ['COPPER','L',.5,'Kinastimulans','Trigger vid stängning över veckans topp.',[68,70,62,66,66,62],'near'],
- ['OMXS30','L',.382,'Range','Köp vid botten av veckans range.',[64,66,58,62,64,60],'wait'],
- ['GOOGL','L',.5,'Flagga','Trigger vid stängning över flaggans topp.',[72,80,66,68,70,66],'near'],
- ['ATCO-A','L',.382,'Dubbelbotten','Väntar på bekräftelse över halsringningen.',[68,72,64,66,70,62],'build'],
- ['DSV','S',.5,'Lägre topp','Fraktpriser faller — säljläge vid retest av brutet stöd.',[66,60,62,64,64,58],'wait'],
- ['AMZN','L',.618,'Djup rekyl','61,8 % är sista försvarslinjen för upptrenden.',[62,78,58,60,72,62],'wait'],
- ['NDA-SE','L',.382,'Trendföljning','Stabil trend; köp vid rekyl mot EMA 20.',[70,74,62,64,66,66],'wait'],
- ['LLY','L',.5,'Kilformation','Riktningen avgörs efter FDA-besked på torsdag.',[64,82,60,62,64,68],'build']]},
-manad:{top:[
- ['GOLD','L',.5,'Våg 4-rekyl','Centralbankernas köp och fallande realräntor bär trenden. Månadens rekyl har stannat vid 50 % och 50-dagars medelvärde.',[80,82,78,72,78,72],'En starkare dollar eller stigande realräntor kan pressa guldet.'],
- ['COPPER','L',.382,'Utbrott ur range','Kopparlagren på LME är låga och elnätsinvesteringarna stiger. Priset bröt en tremånaders range; rekylen till 38,2 % är köpläget.',[78,76,70,74,74,66],'Svag kinesisk industridata kan vända rörelsen snabbt.'],
- ['META','L',.382,'Våg 4 → våg 5','Annonsintäkterna accelererar och dagsgrafen visar en lärobokslik femvågsstruktur. Våg 4 har korrigerat 38,2 % i ett sidledes flat-mönster; våg 5 siktar mot 127,2 %-extensionen.',[84,84,86,78,82,76],'Regulatoriska besked i EU; capex-guidningen kan skrämma.'],
- ['ATCO-A','L',.5,'Rekyl till stöd','Orderingången vänder upp efter fyra svaga kvartal. Rekylen möter både 50 %-retracement och det tidigare utbrottsområdet — dubbel konfluens.',[80,80,74,74,80,70],'Industrikonjunkturen i Kina är osäkerhetsfaktorn.'],
- ['LLY','L',.5,'Retest av utbrott','GLP-1-volymerna överträffar förväntningarna. Utbrottet ur sexmånaders range retestas nu vid 50 %-nivån med avtagande säljvolym.',[78,88,70,72,76,74],'Prispress från amerikanska myndigheter; binär FDA-risk.'],
- ['NESTE','S',.5,'Nedtrend-fortsättning','Raffinerimarginalerna för förnybar diesel pressas. Aktien gör lägre toppar och rekylerar upp mot 50 % — säljläge med tydlig invalidering.',[80,50,78,76,74,64],'Nya subventionsbeslut i EU kan vända sentimentet snabbt.'],
- ['INVE-B','L',.382,'Substansrabatt + trend','Rabatten mot substansvärdet ligger över snittet samtidigt som trenden är intakt. Rekylen till 38,2 % och 50-dagars ger låg risk.',[76,82,68,70,74,68],'Följer OMXS30 tätt — en bred marknadsnedgång slår direkt.']],
- watch:[
- ['BRENT','S',.5,'Överutbud','OPEC+ ökar produktionen — säljläge vid rekyl mot 50 %.',[64,60,62,62,66,58],'wait'],
- ['NDX100','L',.5,'Rapportsäsong','Köp vid rekyl in i rapporterna.',[70,76,64,66,66,66],'wait'],
- ['NVDA','L',.5,'Konsolidering','Tar sats inför rapport — köp vid utbrott.',[74,82,68,70,68,72],'near'],
- ['ABB','L',.382,'Test av rekordnivå','Trigger vid stängning över rekordnivån.',[76,78,66,72,64,68],'near'],
- ['UNH','L',.618,'Bottenbildning','Värderingen lockar, men trenden är inte vänd.',[58,72,60,56,70,52],'build'],
- ['MOWI','L',.5,'Säsongsmönster','Laxpriser är säsongsmässigt starka under Q4.',[64,66,58,62,66,60],'wait'],
- ['COST','S',.382,'Topp-divergens','RSI-divergens på dagsgrafen; bekräftelse saknas.',[60,66,62,58,60,56],'wait'],
- ['KNEBV','L',.5,'Range','Handlas mitt i range — bästa läge vid botten.',[58,70,56,56,62,58],'wait']]},
-kvartal:{top:[
- ['SPX','L',.5,'Trend + vinsttillväxt','Vinstrevideringarna för S&P 500 pekar uppåt och räntesänkningar är inprisade. Indexets kvartalsrekyl mot 50 % och 100-dagars medelvärde har köpts upp.',[78,80,72,70,76,70],'Värderingen är hög (P/E ≈ 22); en besvikelse på vinsterna slår brett.'],
- ['SILVER','L',.618,'Djup rekyl i upptrend','Industriefterfrågan överstiger utbudet för femte året. Djup rekyl till 61,8 % ger en asymmetrisk ingång.',[70,78,74,66,80,64],'Hög volatilitet — rekyler på 15–20 % är normala.'],
- ['GOOGL','L',.382,'Våg 3 av (3)','Molntillväxten accelererar och sökandelen håller trots AI-konkurrens. Priset är i en utökad våg 3 där rekylen till 38,2 % har köpts upp två gånger. Lägst P/E bland megabolagen.',[82,88,84,76,80,74],'Konkurrensrättsliga beslut i USA kan tvinga fram strukturaffärer.'],
- ['ABB','L',.5,'Utbrott + retest','Elektrifiering och datacenter fyller orderboken. Utbrottet ur en ettårig konsolidering retestas vid 50 % och 100-dagars glidande medelvärde.',[80,84,74,72,78,70],'Premievärdering kräver fortsatt stark orderingång.'],
- ['AMZN','L',.5,'Flat-korrektion klar','AWS-marginalen når nya toppar. En flat-korrektion (a-b-c) avslutades vid 50 % och MACD på veckografen vänder upp.',[78,84,76,72,76,72],'Konsumentsvaghet under julhandeln är risken.'],
- ['DSV','L',.618,'Djup våg 2','Integrationen av DB Schenker ger synergier från 2027. En djup våg 2 till 61,8 % är typisk — risk/reward är bäst just här.',[72,80,78,68,82,66],'Fraktvolymer är känsliga för tullar och handelskonflikter.'],
- ['XOM','S',.382,'Distribution','IEA väntar ett oljeöverskott 2027. Distributionsmönster på veckograf och fallande relativ styrka mot S&P 500.',[76,62,72,74,70,66],'Geopolitisk upptrappning ger snabba uppgångar i oljan.']],
- watch:[
- ['GOLD','L',.5,'Konsolidering','Köp vid utbrott ur kvartalets range.',[70,80,66,64,68,68],'build'],
- ['OMXS30','L',.382,'Cyklisk rotation','Gynnas om industrin fortsätter vända upp.',[68,74,62,64,66,62],'near'],
- ['SEB-A','L',.5,'Utdelningscase','Stabilt — väntar på rekyl mot 50 %.',[66,80,60,62,66,62],'wait'],
- ['V','L',.382,'Trend','Kvalitetsbolag; trigger vid nytt högsta.',[70,82,62,64,62,66],'near'],
- ['VWS','L',.618,'Möjlig botten','Möjlig våg C-botten — kräver bekräftelse.',[56,64,66,58,72,56],'build'],
- ['ASSA-B','L',.5,'Konsolidering','Tätt range; utbrott ger kvartalsmål.',[68,78,62,64,66,62],'build'],
- ['AAPL','L',.5,'Avvaktande','AI-cykeln för iPhone är ännu obevisad.',[60,72,58,60,64,62],'wait'],
- ['SAND','L',.382,'Cyklisk vändning','Gruvinvesteringarna tar fart.',[70,74,64,68,66,64],'near']]},
-halvar:{top:[
- ['COPPER','L',.5,'Strukturellt underskott','Elektrifiering och datacenter kräver mer koppar än gruvorna hinner leverera. Veckografen visar en stigande trend; rekylen till 50 % är köpläget.',[76,86,74,68,74,66],'Global konjunkturnedgång är största risken.'],
- ['NDX100','L',.5,'Veckograf: stigande kanal','AI-investeringarna driver vinsttillväxten för de största bolagen. Indexet rekylerar mot kanalens mitt.',[78,80,74,72,74,72],'Koncentrationsrisk — tio bolag står för över hälften av indexet.'],
- ['MSFT','L',.5,'Veckograf: våg (3)','AI-intäkterna i Azure bär en flerårig trend. På veckografen pågår en utökad våg (3) och den senaste korrektionen landade på 50 % och 40-veckors medelvärde.',[80,90,82,72,78,74],'Capex-cykeln kan pressa fritt kassaflöde längre än väntat.'],
- ['NOVO-B','L',.618,'Våg C-botten','Aktien har halverats och prisar in en utdragen priskonkurrens. En komplett a-b-c-korrektion möter 61,8 % av hela uppgången 2021–2024 — kontrarian med fundamentalt stöd (P/E ≈ 14).',[66,86,80,64,86,60],'Fortsatta marknadsandelsförluster; studiedata kan ge stora gap.'],
- ['ASSA-B','L',.382,'Kvalitetstrend','Förvärvsmaskinen och prishöjningar ger jämn vinsttillväxt. Trenden på veckografen är intakt och rekylen till 38,2 % har historiskt varit ett köpläge.',[78,84,70,70,74,66],'Svag byggmarknad i Europa och USA.'],
- ['AVGO','L',.5,'Stigande kanal','Egendesignade AI-chip (ASIC) blir en växande del av kundernas capex. Priset handlas i en stigande kanal på veckografen; rekylen mot kanalens mitt ger bra risk/reward.',[80,82,76,74,74,76],'Kundkoncentration — ett fåtal hyperskalare står för AI-intäkterna.'],
- ['SAND','L',.5,'Omvänd huvud-skuldror','Gruvinvesteringar och verktygsvolymer vänder upp. Omvänd huvud-skuldror på veckografen; 50 %-rekylen efter utbrottet är köpläget.',[76,80,72,70,74,66],'Råvarupriser och Kinas byggsektor.']],
- watch:[
- ['BRENT','S',.5,'Överutbud 2027','Blankningscase om lagren fortsätter byggas.',[62,62,62,60,64,56],'wait'],
- ['SILVER','L',.382,'Industrimetall','Köp vid rekyl mot 40-veckors medelvärde.',[70,78,64,64,66,64],'wait'],
- ['EVO','L',.618,'Låg värdering','P/E ≈ 11 men trenden är negativ — vänta på botten.',[50,78,58,52,70,50],'build'],
- ['NOKIA','L',.382,'Nätverkscykel','Optik till datacenter ger ny tillväxt.',[68,70,64,66,64,62],'near'],
- ['HM-B','S',.5,'Strukturell press','Marginalpress — säljläge vid rekyl.',[64,54,62,60,62,54],'wait'],
- ['TSLA','S',.382,'Värderingsrisk','Robotaxi-förväntningarna är redan prisade.',[62,44,66,60,62,64],'wait'],
- ['KNEBV','L',.5,'Kinaåterhämtning','Case om Kinas fastighetsmarknad stabiliseras.',[58,72,58,58,62,56],'build'],
- ['NFLX','L',.382,'Trend','Annonsnivån växer — trigger vid nytt högsta.',[72,80,66,70,64,68],'near']]},
-ar:{top:[
- ['GOLD','L',.5,'Sekulär trend','Centralbankerna köper rekordvolymer och statsskulderna växer. Guldets flerårstrend är intakt; årets rekyl mot 50 % och 52-veckors medelvärde ger bra risk/reward.',[80,86,76,68,76,72],'Kraftigt stigande realräntor är det största hotet.'],
- ['OMXS30','L',.382,'Värdering + utdelningar','Svenska storbolag handlas under sitt tioåriga P/E-snitt samtidigt som räntorna sjunker. Rekylen till 38,2 % på veckografen är köpläget.',[74,82,70,66,72,64],'Kronan och den globala konjunkturen styr.'],
- ['GOOGL','L',.5,'Omvärdering','Lägst värderade megabolaget trots växande moln- och AI-intäkter. Veckografen bröt ut ur en tvåårig range; rekylen mot 50 % ger årsmålet vid 161,8 %-extensionen.',[80,90,78,72,76,72],'Antitrustprocesser och AI-konkurrens inom sök.'],
- ['ABB','L',.382,'Sekulär trend','Elektrifiering, datacenter och automation ger en flerårig ordercykel. Veckografen visar en ren upptrend; rekylen till 38,2 % och 52-veckors medelvärde har varit köpläge tre gånger sedan 2020.',[80,86,76,70,74,70],'Värderingen (P/E ≈ 30) lämnar lite utrymme för besvikelser.'],
- ['LLY','L',.5,'Strukturell tillväxt','GLP-1-marknaden väntas mer än fördubblas till 2030 och Lilly tar marknadsandelar. Veckografens konsolidering har brutits uppåt; 50 % är retest-zonen.',[76,90,72,70,74,72],'Prisregleringar i USA och patentutgångar på sikt.'],
- ['INVE-B','L',.5,'Compounder','Investor har slagit index med bred marginal över tio år. Substansrabatten ligger över snittet och trenden på veckografen är obruten.',[76,84,70,68,72,66],'Följer den svenska börsen tätt — inget skydd vid bred nedgång.'],
- ['VWS','L',.618,'Flerårig botten','Orderboken är rekordstor efter år av marginalproblem. Veckografen visar en möjlig a-b-c-botten vid 61,8 % av hela uppgången — asymmetrisk risk/reward.',[66,76,78,62,82,60],'Räntekänsligt; politisk risk kring subventioner i USA.']],
- watch:[
- ['COPPER','L',.5,'Elektrifiering','Köp vid rekyl — långsiktigt underskott.',[70,84,66,62,68,62],'wait'],
- ['SPX','L',.5,'Brett index','Köp vid rekyl mot 40-veckors medelvärde.',[72,78,64,62,66,64],'wait'],
- ['AMZN','L',.5,'Flerårig trend','Köp vid rekyl mot 40-veckors medelvärde.',[70,84,66,64,68,66],'wait'],
- ['SAAB-B','L',.382,'Supercykel försvar','Stark men utsträckt — vänta på konsolidering.',[74,80,68,62,62,70],'build'],
- ['NESTE','L',.618,'Möjlig botten','Kontrarian — bottenbildning som kräver bekräftelse.',[52,62,64,54,72,50],'build'],
- ['ASSA-B','L',.382,'Kvalitet','Trigger vid nytt högsta på veckobasis.',[72,82,64,64,64,64],'near'],
- ['XOM','S',.5,'Oljeöverskott','Blankningscase om oljan faller under 60 USD.',[62,58,62,60,62,58],'wait'],
- ['DSV','L',.5,'Synergier','Integrationen av Schenker bär vinsttillväxten 2027–28.',[66,80,64,62,68,62],'wait']]}
-};
+const D=JSON.parse(document.getElementById('cases').textContent); // case texts and scores: see the JSON block above
 const STATUS={near:'Nära trigger',wait:'Väntar på rekyl',build:'Setup byggs',alt:'Strax utanför topp 5'};
 const OFF={near:.05,wait:.16,build:.10};
 const IDX=[['S&P 500',6612.4,.42],['Nasdaq 100',24310.8,.71],['OMXS30',2704.9,.35],['OMXC25',1641.2,-.18],['OBX',1472.6,-.52],['OMXH25',5018.3,.12],['VIX',15.8,-3.1]];
@@ -656,7 +656,7 @@ function timeline(hz,s,N,fwd){
 
 // ---------- analysis model
 const cache={};
-function ema(vals,p){const k=2/(p+1),o=[];vals.forEach((v,i)=>o.push(i?o[i-1]+k*(v-o[i-1]):v));return o}
+const ema=MAA.ema,toCandles=MAA.toCandles;
 function model(item,hz){
   const key=hz+'|'+item.s+'|'+item.kind;
   if(cache[key])return cache[key];
@@ -711,64 +711,17 @@ function synthModel(item,hz,key){
 }
 // ---------- real price data
 let REAL=null;
-const SER_KEY={intra:'intra',hour:'hour',day:'day',week:'week'};
-const SER_N={intradag:420,vecka:90,manad:90,kvartal:160,halvar:80,ar:130};
-function indicators(c,N){
-  const closes=c.map(x=>x.close);
-  const e20=ema(closes,20),e50=ema(closes,50),e12=ema(closes,12),e26=ema(closes,26);
-  const macd=e12.map((v,i)=>v-e26[i]),sig=ema(macd,9);
-  let pv=0,vv=0;const vwap=c.map(x=>{const tp=(x.high+x.low+x.close)/3,v=x.vol||1;pv+=tp*v;vv+=v;return pv/vv});
-  const rsi=[];let ag=0,al=0;
-  for(let i=1;i<N;i++){const d=closes[i]-closes[i-1],g=Math.max(d,0),l=Math.max(-d,0);
-    if(i<=14){ag+=g/14;al+=l/14;rsi[i]=i===14?100-100/(1+ag/(al||1e-9)):null}
-    else{ag=(ag*13+g)/14;al=(al*13+l)/14;rsi[i]=100-100/(1+ag/(al||1e-9))}}
-  return {e20,e50,vwap,rsi,macd,sig};
-}
+// live analysis from the shared rules (analysis.js), plus what the chart needs
 function realModel(item,hz){
-  const H=HZ[hz],sym=REAL&&REAL.symbols[item.s],ser=sym&&sym.series[SER_KEY[H.kind]];
-  if(!ser||ser.c.length<30)return null;
-  const n=Math.min(SER_N[hz],ser.c.length),off=ser.c.length-n;
-  return analyzeCandles(toCandles(ser,off,ser.c.length),item,hz);
-}
-function toCandles(ser,from,to){const c=[];for(let i=from;i<to;i++)c.push({time:ser.t[i],open:ser.o[i],high:ser.h[i],low:ser.l[i],close:ser.c[i],vol:ser.v[i]});return c}
-// Levels and computed scores from a candle window (only data up to the last candle is used).
-function analyzeCandles(c,item,hz){
-  const H=HZ[hz],N=c.length,t=T[item.s],s=item.dir==='L'?1:-1,P=c[N-1].close;
-  // impulse in the pick's direction: extreme of the window and the opposite extreme before it
-  const hiI=a=>a.reduce((b,x,i)=>x.high>a[b].high?i:b,0),loI=a=>a.reduce((b,x,i)=>x.low<a[b].low?i:b,0);
-  let endI=s>0?hiI(c):loI(c);if(endI<5)endI=s>0?hiI(c.slice(0,N-3)):loI(c.slice(0,N-3));
-  const head=c.slice(0,endI+1),startI=s>0?loI(head):hiI(head);
-  const A=s>0?c[startI].low:c[startI].high,B=s>0?c[endI].high:c[endI].low,R=Math.abs(B-A)||P*.01;
-  const val=u=>A+s*u*R,curU=(P-A)/(s*R);
-  const opts=[.382,.5,.618].map(r=>({r,eU:1-r})).filter(o=>o.eU<=curU+.05);
-  const pick=opts.length?opts.reduce((a,b)=>Math.abs(b.eU-curU)<Math.abs(a.eU-curU)?b:a):{r:.618,eU:.382};
-  const eU=pick.eU,slU=eU-.24;
-  const ind=indicators(c,N);
-  const lv={entry:val(eU),zLo:Math.min(val(eU-.03),val(eU+.03)),zHi:Math.max(val(eU-.03),val(eU+.03)),sl:val(slU),tp1:val(1),tp2:val(1.272),tp3:val(1.618),w1:val(0)};
-  const risk=Math.abs(lv.entry-lv.sl),rr=[lv.tp1,lv.tp2,lv.tp3].map(v=>Math.abs(v-lv.entry)/risk);
-  // scores computed from the data: TA, momentum, Fibonacci; the rest stays from the case
-  const e20=ind.e20[N-1],e50=ind.e50[N-1],slope=ind.e50[N-1]-ind.e50[Math.max(0,N-6)],rsiNow=Math.round(ind.rsi[N-1]??50);
-  const macdUp=ind.macd[N-1]>ind.sig[N-1];
-  const ta=50+(s*(P-e20)>0?12:0)+(s*(P-e50)>0?12:0)+(s*(e20-e50)>0?14:0)+(s*slope>0?8:0);
-  const rsiOk=s>0?(rsiNow>=38&&rsiNow<=68):(rsiNow>=32&&rsiNow<=62),rsiRise=s*((ind.rsi[N-1]??50)-(ind.rsi[N-4]??50))>0;
-  const mom=48+((macdUp===(s>0))?18:0)+(rsiOk?16:0)+(rsiRise?10:0);
-  const fib=Math.round(Math.max(40,Math.min(92,90-Math.abs(curU-eU)*220)));
-  const sc=[ta,item.sc[1],item.sc[2],mom,fib,item.sc[5]];
-  const score=Math.round(sc.reduce((a,v,i)=>a+v*H.w[i],0));
-  const prob=Math.max(30,Math.min(78,Math.round(35+(score-50)*.9))),ev=(prob/100)*rr[1]-(1-prob/100);
-  const gap=s>0?curU-eU:curU-eU,status=item.kind!=='watch'?null:Math.abs(gap)<.06?'near':gap>.15?'wait':'build';
+  const m=MAA.liveAnalysis(REAL&&REAL.symbols,item,hz);if(!m)return null;
+  const H=HZ[hz],c=m.c,N=m.N,s=m.s;
   // future timestamps for the projection
   const step=Math.max(60,Math.round((c[N-1].time-c[Math.max(0,N-6)].time)/Math.min(5,N-1)));
-  const fwd=H.fwd,times=c.map(x=>x.time);for(let i=1;i<=fwd;i++)times.push(c[N-1].time+i*step);
-  const marks=[{i:startI,above:s<0,text:s>0?'Låg':'Topp'},{i:endI,above:s>0,text:s>0?'Topp':'Låg'}];
-  return {item:Object.assign({},item,{ret:pick.r}),t,s,P,R,val,c,tl:{t:times,fwd},...ind,lv,rr,score,prob,ev,risk,eU,hz,N,sc,marks,projLabel:'Mål',real:true,
-    curU,rsiNow,e20Now:e20,e50Now:e50,vwapNow:ind.vwap[N-1],macdUp,status:status||item.status,A,B};
+  const times=c.map(x=>x.time);for(let i=1;i<=H.fwd;i++)times.push(c[N-1].time+i*step);
+  const marks=[{i:m.startI,above:s<0,text:s>0?'Låg':'Topp'},{i:m.endI,above:s>0,text:s>0?'Topp':'Låg'}];
+  return Object.assign(m,{t:T[item.s],tl:{t:times,fwd:H.fwd},marks,projLabel:'Mål',real:true});
 }
-function pool(hz){
-  const d=D[hz];
-  const mk=(a,kind)=>({s:a[0],dir:a[1],ret:a[2],setup:a[3],text:a[4],sc:a[5],risk:kind==='top'?a[6]:null,status:kind==='watch'?a[6]:null,kind});
-  return {top:d.top.map(a=>mk(a,'top')),watch:d.watch.map(a=>mk(a,'watch'))};
-}
+const pool=hz=>MAA.pool(D,hz);
 function signals(m){
   const {item,s,lv,t,hz,P}=m,L=s>0,sc=m.sc,cur=t[2],intra=hz==='intradag';
   const rel=(v)=>P>v?'över':'under';
@@ -878,7 +831,8 @@ function renderHz(){
 }
 function renderPicks(){
   const p=pool(state.hz),intra=state.hz==='intradag';
-  const tops=p.top.map(it=>model(it,state.hz)).sort((a,b)=>b.score-a.score);
+  // setups where the price already passed the stop loss go last (they are no longer valid)
+  const tops=p.top.map(it=>model(it,state.hz)).sort((a,b)=>((b.valid!==false)-(a.valid!==false))||b.score-a.score);
   const ranked=tops.filter(m=>inMkt(m.item.s)),shown=ranked.slice(0,5),extra=ranked.slice(5);
   document.getElementById('pk-count').textContent=`Bästa ${shown.length} av ${ranked.length} kandidater`;
   const el=document.getElementById('picks');
@@ -1006,6 +960,7 @@ function renderDetail(m){
       ${ring(m.score)}
     </div>
   </div>
+  ${m.valid===false?`<div class="intraday-note" style="background:var(--down-soft)"><b style="color:var(--down)">Ogiltig</b><span>Kursen har redan passerat stop loss (${f2(lv.sl)}). Setupen gäller inte längre — invänta en ny impuls.</span></div>`:''}
   ${intra?`<div class="intraday-note"><b>Intradag</b><span>Positionen stängs senast ${hm(ex)} CET (${kindOf(item.s)==='stock'?t[1]:'certifikathandeln'} stänger ${hm(EX[t[1]].c)}), även om varken TP eller SL nåtts. Ingen position hålls över natten.</span></div>`:''}
   <div class="chart-box">
     <div class="chart-tools">
@@ -1083,95 +1038,124 @@ function calc(m){
   <div><span>Vinst vid TP2</span><span class="num pos">+${nf0.format(n*m.risk*fx*m.rr[1])} SEK</span></div>`;
 }
 
-// ---------- backtest: replay the level rules on history, no look-ahead
-// ser: data series; W: bars the analysis sees; K: max bars a trade is held; E: bars the entry order stays open
-const BT={intradag:{ser:'intra5',W:24,E:12,session:true},vecka:{ser:'hour',W:90,K:35,E:9},manad:{ser:'day',W:90,K:21,E:5},
-  kvartal:{ser:'day',W:160,K:63,E:15},halvar:{ser:'week',W:80,K:26,E:6},ar:{ser:'week',W:130,K:52,E:12}};
-const dayOf=t=>Math.floor(t/86400);
-function simulate(item,hz,minScore){
-  const cfg=BT[hz],ser=REAL&&REAL.symbols[item.s]&&REAL.symbols[item.s].series[cfg.ser];
-  if(!ser||ser.c.length<cfg.W+5)return null;
-  const all=toCandles(ser,0,ser.c.length),n=all.length,trades=[];let missed=0,t=cfg.W-1;
-  while(t<n-1){
-    let from=t-cfg.W+1,last=Math.min(n-1,t+(cfg.K||0));
-    if(cfg.session){ // intraday: only the current session, exit at its last bar
-      let a=t;while(a>0&&dayOf(all[a-1].time)===dayOf(all[t].time))a--;
-      if(t-a+1<cfg.W){t++;continue}
-      from=a;last=t;while(last<n-1&&dayOf(all[last+1].time)===dayOf(all[t].time))last++;
-    }
-    const m=analyzeCandles(all.slice(from,t+1),item,hz),s=m.s,lv=m.lv;
-    if(m.score<minScore||s*(m.P-lv.sl)<=0||last<=t){t++;continue}
-    let j=-1,fill=0;
-    for(let k=t+1;k<=Math.min(t+cfg.E,last);k++){const b=all[k];
-      if(s*(b.open-lv.sl)<=0)break; // opened beyond the stop: setup no longer valid, no trade
-      if(s>0?b.low<=lv.entry:b.high>=lv.entry){j=k;fill=s>0?Math.min(lv.entry,b.open):Math.max(lv.entry,b.open);break}}
-    if(j<0){missed++;t+=cfg.E;continue}
-    const risk=Math.abs(lv.entry-lv.sl),tps=[lv.tp1,lv.tp2,lv.tp3],R=[];let hit=0,exitI=last,res='tid';
-    for(let k=j;k<=last&&R.length<3;k++){const b=all[k];
-      if(s>0?b.low<=lv.sl:b.high>=lv.sl){const px=s>0?Math.min(lv.sl,b.open):Math.max(lv.sl,b.open);while(R.length<3)R.push(s*(px-fill)/risk);exitI=k;res=hit?'tp':'sl';break}
-      while(hit<3&&(s>0?b.high>=tps[hit]:b.low<=tps[hit])){R.push(s*(tps[hit]-fill)/risk);hit++;exitI=k;res='tp'}
-    }
-    if(R.length<3){const px=all[last].close;while(R.length<3)R.push(s*(px-fill)/risk);exitI=last;if(!hit)res='tid'}
-    const r=(R[0]+R[1]+R[2])/3;
-    trades.push({s:item.s,dir:item.dir,t0:all[t].time,t1:all[exitI].time,entry:fill,sl:lv.sl,r,hit,res,bars:exitI-j+1,score:m.score});
-    t=exitI+1;
-  }
-  return {trades,missed,from:all[cfg.W-1].time,to:all[n-1].time};
-}
-let btToken=0,eqChart=null;
+// ---------- backtest (rules in analysis.js) and follow-up of logged picks
+const BTUI={tab:'sim',variant:'std'};
+let btMemo={},btToken=0,eqChart=null;
 function fmtDate(t,withTime){const d=new Date(t*1000),m=['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'][d.getUTCMonth()];
   return withTime?`${d.getUTCDate()} ${m} ${hm(d.getUTCHours()*60+d.getUTCMinutes())}`:`${d.getUTCDate()} ${m} ${d.getUTCFullYear()}`}
+const costPct=hz=>{const v=document.getElementById('bt-cost').value;return v==='auto'?MAA.COST[hz]:+v};
+const pctTxt0=(a,b)=>b?Math.round(a/b*100)+' %':'–';
+function stats(tr){
+  const n=tr.length,sum=tr.reduce((a,x)=>a+x.rn,0);let eq=0,peak=0,dd=0;
+  for(const x of tr){eq+=x.rn;peak=Math.max(peak,eq);dd=Math.min(dd,eq-peak)}
+  const gw=tr.filter(x=>x.rn>0).reduce((a,x)=>a+x.rn,0),gl=-tr.filter(x=>x.rn<0).reduce((a,x)=>a+x.rn,0);
+  return {n,sum,avg:n?sum/n:null,win:tr.filter(x=>x.rn>0).length,tp1:tr.filter(x=>x.hit>0).length,dd,pf:gl?gw/gl:null};
+}
+function drawEquity(el,curve,withTime){
+  const LW=window.LightweightCharts;if(!el||!LW||!curve.length)return;
+  const C=n=>cssVar('--'+n);
+  eqChart=LW.createChart(el,{autoSize:true,layout:{background:{type:'solid',color:C('surface')},textColor:C('muted'),fontFamily:'JetBrains Mono, monospace',fontSize:11,attributionLogo:true},
+    grid:{vertLines:{visible:false},horzLines:{color:C('line-2')}},rightPriceScale:{borderColor:C('line')},timeScale:{borderColor:C('line'),timeVisible:withTime},
+    localization:{locale:'sv-SE',priceFormatter:v=>f1(v)+'R'}});
+  const ser=eqChart.addSeries(LW.BaselineSeries,{baseValue:{type:'price',price:0},topLineColor:C('up'),bottomLineColor:C('down'),
+    topFillColor1:C('up-soft'),topFillColor2:'rgba(0,0,0,0)',bottomFillColor1:'rgba(0,0,0,0)',bottomFillColor2:C('down-soft'),lineWidth:2,priceLineVisible:false});
+  ser.setData(curve);eqChart.timeScale().fitContent();
+}
+const kp=(l,v,sub,cls='')=>`<div class="kp"><div class="l">${l}</div><div class="v ${cls}">${v}</div><div class="s">${sub}</div></div>`;
+const resLabel=x=>x.res==='sl'?'Stop loss':x.res==='tp'?`TP${x.hit}${x.hit<3?' + '+(x.rn>=0?'rest':'stop'):''}`:'Tidsgräns';
 function renderBacktest(){
   const out=document.getElementById('bt-out'),hz=state.hz,token=++btToken;
+  document.querySelectorAll('[data-bttab]').forEach(b=>b.setAttribute('aria-selected',b.dataset.bttab===BTUI.tab));
+  const vs=document.getElementById('bt-var');
+  if(!vs.options.length)vs.innerHTML=Object.entries(MAA.VARIANTS).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join('');
+  vs.value=BTUI.variant;vs.parentElement.hidden=BTUI.tab==='log';document.getElementById('bt-min').parentElement.hidden=BTUI.tab==='log';
+  document.getElementById('bt-intro').textContent=BTUI.tab==='sim'
+    ?'Samma regler som sätter dagens nivåer körs bakåt i tiden, stapel för stapel och bara med den data som fanns då. Varje signal följs tills stop loss, målen eller tidsgränsen nås. ⅓ av positionen säljs vid varje TP.'
+    :'Sajtens topp 5-förslag sparas automatiskt vid fasta tider och följs upp mot kurserna efteråt, med samma regler för entry, mål och stop loss som i simuleringen.';
   if(eqChart){eqChart.remove();eqChart=null}
-  if(!REAL){out.innerHTML='<div class="bt-empty">Backtest kräver riktig kursdata. Logga in, eller vänta tills kurserna har laddats.</div>';return}
+  if(!REAL){out.innerHTML='<div class="bt-empty">Kräver riktig kursdata. Logga in, eller vänta tills kurserna har laddats.</div>';return}
+  if(BTUI.tab==='log'){renderLog(out,hz);return}
   out.innerHTML='<div class="bt-empty">Räknar…</div>';
   setTimeout(()=>{
     if(token!==btToken)return;
+    const cfg=MAA.BT[hz],min=+document.getElementById('bt-min').value,cost=costPct(hz);
     const p=pool(hz),seen=new Set(),items=[...p.top,...p.watch].filter(it=>!seen.has(it.s)&&seen.add(it.s)&&inMkt(it.s));
-    const min=+document.getElementById('bt-min').value,rows=[];let trades=[],missed=0,from=Infinity,to=0;
-    for(const it of items){const r=simulate(it,hz,min);if(!r)continue;
-      rows.push({it,...r});trades=trades.concat(r.trades);missed+=r.missed;from=Math.min(from,r.from);to=Math.max(to,r.to)}
-    if(!rows.length){out.innerHTML=`<div class="bt-empty">För lite historik för ${HZ[hz].t.toLowerCase()} i den hämtade datan. ${hz==='intradag'?'Intradag kräver 5-minutersdata för flera dagar — den kommer med nästa uppdatering av timdatan.':''}</div>`;return}
-    trades.sort((a,b)=>a.t1-b.t1);
-    const N=trades.length,wins=trades.filter(x=>x.r>0).length,tp1=trades.filter(x=>x.hit>0).length,sum=trades.reduce((a,x)=>a+x.r,0);
-    let eq=0,peak=0,dd=0;const curve=[];let lastT=0;
-    for(const x of trades){eq+=x.r;peak=Math.max(peak,eq);dd=Math.min(dd,eq-peak);const tt=Math.max(x.t1,lastT+1);lastT=tt;curve.push({time:tt,value:eq})}
-    const gw=trades.filter(x=>x.r>0).reduce((a,x)=>a+x.r,0),gl=-trades.filter(x=>x.r<0).reduce((a,x)=>a+x.r,0);
-    const withTime=HZ[hz].kind==='intra'||HZ[hz].kind==='hour',pct=(a,b)=>b?Math.round(a/b*100)+' %':'–';
-    const kp=(l,v,sub,cls='')=>`<div class="kp"><div class="l">${l}</div><div class="v ${cls}">${v}</div><div class="s">${sub}</div></div>`;
+    const res={};let from=Infinity,to=0;const rows=[];
+    for(const it of items){
+      const ser=REAL.symbols[it.s]&&REAL.symbols[it.s].series[cfg.ser],memo=btMemo[hz+'|'+it.s]||(btMemo[hz+'|'+it.s]={});
+      const row={it,by:{}};
+      for(const [k,v] of Object.entries(MAA.VARIANTS)){
+        const r=MAA.backtest(ser,it,hz,Object.assign({minScore:min},v),memo);if(!r)continue;
+        r.trades.forEach(x=>x.rn=x.r-MAA.costR(x,cost));row.by[k]=r;
+        (res[k]||(res[k]={trades:[],missed:0})).trades.push(...r.trades);res[k].missed+=r.missed;
+        from=Math.min(from,r.from);to=Math.max(to,r.to);
+      }
+      if(Object.keys(row.by).length)rows.push(row);
+    }
+    if(!rows.length){out.innerHTML=`<div class="bt-empty">För lite historik för ${HZ[hz].t.toLowerCase()} i den hämtade datan.</div>`;return}
+    const cut=from+(to-from)*.6,withTime=HZ[hz].kind==='intra'||HZ[hz].kind==='hour';
+    const vstats={};
+    for(const [k,r] of Object.entries(res)){r.trades.sort((a,b)=>a.t1-b.t1);
+      vstats[k]={all:stats(r.trades),early:stats(r.trades.filter(x=>x.t0<cut)),late:stats(r.trades.filter(x=>x.t0>=cut)),missed:r.missed}}
+    const bestLate=Object.entries(vstats).filter(([,v])=>v.late.n>=5).sort((a,b)=>b[1].late.avg-a[1].late.avg)[0];
+    const sel=res[BTUI.variant]?BTUI.variant:'std',S=vstats[sel].all,trades=res[sel].trades;
+    // buy & hold over the same period, equal weight
+    const bh=rows.map(r=>{const x=r.by[sel]||r.by.std;return (x.lastClose/x.firstClose-1)*100});
+    const bhAvg=bh.reduce((a,x)=>a+x,0)/bh.length;
+    const curve=[];let eq=0,lastT=0;for(const x of trades){eq+=x.rn;const tt=Math.max(x.t1,lastT+1);lastT=tt;curve.push({time:tt,value:eq})}
+    const avgTxt=v=>v==null?'–':sgn(v,f2)+'R';
     out.innerHTML=`
       <div class="kpis">
-        ${kp('Affärer',N,`${missed} signaler triggade aldrig`)}
-        ${kp('Nådde TP1',pct(tp1,N),'andel av affärerna')}
-        ${kp('Vinnande',pct(wins,N),'slutade med vinst')}
-        ${kp('Snitt per affär',N?sgn(sum/N,f2)+'R':'–','förväntat värde',sum>=0?'pos':'neg')}
-        ${kp('Summa',sgn(sum)+'R',`vinstfaktor ${gl?f2(gw/gl):'–'}`,sum>=0?'pos':'neg')}
-        ${kp('Största nedgång',f1(dd)+'R','från topp till botten','neg')}
+        ${kp('Affärer',S.n,`${vstats[sel].missed} signaler triggade aldrig`)}
+        ${kp('Nådde TP1',pctTxt0(S.tp1,S.n),'andel av affärerna')}
+        ${kp('Vinnande',pctTxt0(S.win,S.n),'efter kostnader')}
+        ${kp('Snitt per affär',avgTxt(S.avg),`kostnad ${f2(cost)} % per affär`,S.sum>=0?'pos':'neg')}
+        ${kp('Summa',sgn(S.sum)+'R',`vinstfaktor ${S.pf?f2(S.pf):'–'}`,S.sum>=0?'pos':'neg')}
+        ${kp('Största nedgång',f1(S.dd)+'R','från topp till botten','neg')}
       </div>
+      <div class="bench">
+        ${kp('Strategin, 1 % risk per affär',sgn(S.sum)+' %','summa R × 1 % av kapitalet, utan ränta på ränta',S.sum>=0?'pos':'neg')}
+        ${kp('Köp och behåll, likaviktat',sgn(bhAvg)+' %',`samma ${rows.length} instrument och period`,bhAvg>=0?'pos':'neg')}
+        ${kp('Skillnad',sgn(S.sum-bhAvg)+' %-enheter',S.sum>bhAvg?'reglerna slog att äga instrumenten':'att äga instrumenten var bättre',S.sum>=bhAvg?'pos':'neg')}
+      </div>
+      <div class="bt-card" style="margin-top:20px"><h3 class="sec-t"><span>Regelvarianter</span><span>tidig period = första 60 % · sen period = sista 40 % (kontroll)</span></h3>
+        <div class="bt-scroll"><table class="bt-tbl vt"><thead><tr><th>Regler</th><th>Affärer</th><th>Vinnande</th><th>Snitt R, tidig</th><th>Snitt R, sen</th><th>Summa R</th><th>Största nedgång</th></tr></thead><tbody>
+        ${Object.entries(vstats).map(([k,v])=>`<tr data-var="${k}" class="${k===sel?'sel':''}"><td><b>${MAA.VARIANTS[k].name}</b><br><span style="color:var(--muted);font-size:11.5px">${MAA.VARIANTS[k].desc}</span></td><td>${v.all.n}</td><td>${pctTxt0(v.all.win,v.all.n)}</td><td class="${(v.early.avg||0)>=0?'pos':'neg'}">${avgTxt(v.early.avg)}</td><td class="${(v.late.avg||0)>=0?'pos':'neg'}${bestLate&&bestLate[0]===k?' best':''}">${avgTxt(v.late.avg)}${bestLate&&bestLate[0]===k?' ★':''}</td><td class="${v.all.sum>=0?'pos':'neg'}">${sgn(v.all.sum)}</td><td class="neg">${f1(v.all.dd)}</td></tr>`).join('')}
+        </tbody></table></div>
+        <p class="bt-note" style="padding:0 16px 12px">Välj regler genom att klicka på en rad. ★ = bäst i den sena perioden (minst 5 affärer). En variant är bara trovärdig om den håller i <i>båda</i> perioderna — ser den bra ut bara i den tidiga är den troligen anpassad till slumpen.</p></div>
       <div class="bt-grid">
-        <div class="bt-card"><h3 class="sec-t"><span>Resultatkurva</span><span>summa R · ${fmtDate(from,withTime)} – ${fmtDate(to,withTime)}</span></h3><div class="eq" id="eq"></div></div>
+        <div class="bt-card"><h3 class="sec-t"><span>Resultatkurva · ${MAA.VARIANTS[sel].name}</span><span>summa R efter kostnad · ${fmtDate(from,withTime)} – ${fmtDate(to,withTime)}</span></h3><div class="eq" id="eq"></div></div>
         <div class="bt-card"><h3 class="sec-t"><span>Per instrument</span><span>${rows.length} instrument</span></h3>
-          <div class="bt-scroll"><table class="bt-tbl"><thead><tr><th>Instrument</th><th>Affärer</th><th>TP1</th><th>Vinst</th><th>Snitt R</th><th>Summa R</th></tr></thead><tbody>
-          ${rows.map(r=>{const t=r.trades,n=t.length,s=t.reduce((a,x)=>a+x.r,0);return `<tr><td><span class="dir ${r.it.dir}">${r.it.dir==='L'?'L':'K'}</span> ${esc(r.it.s)}</td><td>${n}</td><td>${pct(t.filter(x=>x.hit).length,n)}</td><td>${pct(t.filter(x=>x.r>0).length,n)}</td><td class="${s>=0?'pos':'neg'}">${n?sgn(s/n,f2):'–'}</td><td class="${s>=0?'pos':'neg'}">${n?sgn(s):'–'}</td></tr>`}).join('')}
+          <div class="bt-scroll"><table class="bt-tbl"><thead><tr><th>Instrument</th><th>Affärer</th><th>Vinst</th><th>Snitt R</th><th>Summa R</th><th>Köp &amp; behåll</th></tr></thead><tbody>
+          ${rows.map((r,i)=>{const x=r.by[sel];if(!x)return '';const st=stats(x.trades);return `<tr><td><span class="dir ${r.it.dir}">${r.it.dir==='L'?'L':'K'}</span> ${esc(r.it.s)}</td><td>${st.n}</td><td>${pctTxt0(st.win,st.n)}</td><td class="${st.sum>=0?'pos':'neg'}">${st.n?sgn(st.avg,f2):'–'}</td><td class="${st.sum>=0?'pos':'neg'}">${st.n?sgn(st.sum):'–'}</td><td class="${bh[i]>=0?'pos':'neg'}">${sgn(bh[i])} %</td></tr>`}).join('')}
           </tbody></table></div></div>
       </div>
       <div class="bt-card" style="margin-top:20px"><h3 class="sec-t"><span>Senaste affärerna</span><span>de 30 senaste</span></h3>
-        <div class="bt-scroll"><table class="bt-tbl"><thead><tr><th>Signal</th><th>Instrument</th><th>Poäng</th><th>Entry</th><th>Stop loss</th><th>Utfall</th><th>Staplar</th><th>R</th></tr></thead><tbody>
-        ${trades.slice(-30).reverse().map(x=>`<tr><td>${fmtDate(x.t0,withTime)}</td><td><span class="dir ${x.dir}">${x.dir==='L'?'L':'K'}</span> ${esc(x.s)}</td><td>${x.score}</td><td>${f2(x.entry)}</td><td>${f2(x.sl)}</td><td><span class="res ${x.res}">${x.res==='sl'?'Stop loss':x.res==='tp'?`TP${x.hit}${x.hit<3?' + '+(x.r>=0?'rest':'SL'):''}`:'Tidsgräns'}</span></td><td>${x.bars}</td><td class="${x.r>=0?'pos':'neg'}">${sgn(x.r,f2)}</td></tr>`).join('')||'<tr><td colspan="8">Inga affärer med vald minsta poäng.</td></tr>'}
+        <div class="bt-scroll"><table class="bt-tbl"><thead><tr><th>Signal</th><th>Instrument</th><th>Poäng</th><th>Entry</th><th>Stop loss</th><th>Utfall</th><th>Staplar</th><th>R netto</th></tr></thead><tbody>
+        ${trades.slice(-30).reverse().map(x=>`<tr><td>${fmtDate(x.t0,withTime)}</td><td><span class="dir ${x.dir}">${x.dir==='L'?'L':'K'}</span> ${esc(x.s)}</td><td>${x.score}</td><td>${f2(x.entry)}</td><td>${f2(x.sl)}</td><td><span class="res ${x.res}">${resLabel(x)}</span></td><td>${x.bars}</td><td class="${x.rn>=0?'pos':'neg'}">${sgn(x.rn,f2)}</td></tr>`).join('')||'<tr><td colspan="8">Inga affärer med vald minsta poäng.</td></tr>'}
         </tbody></table></div></div>
-      <p class="bt-note">Så räknas det: en signal ges när poängen är minst ${min||'0'} och priset ligger ovanför stop loss (under för korta affärer). En köporder läggs vid entrynivån och gäller i ${BT[hz].E} staplar. ⅓ säljs vid TP1, TP2 och TP3; resten stoppas vid stop loss eller säljs vid ${BT[hz].session?'dagens stängning':`tidsgränsen (${BT[hz].K} staplar)`}. Om stop loss och mål nås i samma stapel räknas stop loss (försiktigt antagande). R = resultat i antal risker (1R = avståndet entry → stop loss). Courtage, spread och hävstångsprodukternas kostnader ingår inte. Bara de beräknade delarna (teknisk analys, momentum och Fibonacci) varierar över tiden; fundamenta, Elliott och sentiment är fasta värden från dagens case. Historiskt resultat är ingen garanti för framtiden.</p>`;
-    const el=document.getElementById('eq'),LW=window.LightweightCharts;
-    if(el&&LW&&curve.length){
-      const C=n=>cssVar('--'+n);
-      eqChart=LW.createChart(el,{autoSize:true,layout:{background:{type:'solid',color:C('surface')},textColor:C('muted'),fontFamily:'JetBrains Mono, monospace',fontSize:11,attributionLogo:true},
-        grid:{vertLines:{visible:false},horzLines:{color:C('line-2')}},rightPriceScale:{borderColor:C('line')},timeScale:{borderColor:C('line'),timeVisible:withTime},
-        localization:{locale:'sv-SE',priceFormatter:v=>f1(v)+'R'}});
-      const up=sum>=0,ser=eqChart.addSeries(LW.BaselineSeries,{baseValue:{type:'price',price:0},topLineColor:C('up'),bottomLineColor:C('down'),
-        topFillColor1:C('up-soft'),topFillColor2:'rgba(0,0,0,0)',bottomFillColor1:'rgba(0,0,0,0)',bottomFillColor2:C('down-soft'),lineWidth:2,priceLineVisible:false});
-      ser.setData(curve);eqChart.timeScale().fitContent();
-    }
+      <p class="bt-note">Så räknas det: en signal ges när poängen är minst ${min||'0'} och priset ligger på rätt sida om stop loss. En order läggs vid entrynivån och gäller i ${cfg.E} staplar. ⅓ säljs vid varje mål; resten stoppas eller säljs vid ${cfg.session?'dagens stängning':`tidsgränsen (${cfg.K} staplar)`}. Om stop loss och mål nås i samma stapel räknas stop loss. R = resultat i antal risker (1R = avståndet entry → stop loss), efter kostnad (${f2(cost)} % av positionen tur och retur, motsvarar spread och courtage). Hävstång ändrar inte resultatet i R när positionen storleksbestäms efter risk — den minskar bara kapitalet som binds. Bara teknisk analys, momentum och Fibonacci varierar över tiden; övriga poäng är dagens värden från caset, och instrumenten är valda i dag (efterhandsval). Historiskt resultat är ingen garanti för framtiden.</p>`;
+    drawEquity(document.getElementById('eq'),curve,withTime);
   },20);
+}
+function renderLog(out,hz){
+  const log=(REAL.log&&REAL.log.entries)||[],cost=costPct(hz);
+  if(!log.length){out.innerHTML=`<div class="bt-empty">Inga loggade förslag än. ${REAL.log?`Loggningen startade ${new Date(REAL.log.started).toLocaleDateString('sv-SE')}.`:''} Intradag loggas vardagar 09:45 och 15:45, vecka varje vardag 09:45 och längre horisonter en gång i veckan efter 18:00.</div>`;return}
+  const done=x=>x.status==='closed',net=x=>x.r-MAA.costR({entry:x.fill,risk:x.risk},cost);
+  const byHz=MAA.HZ_ORDER.map(k=>{const e=log.filter(x=>x.hz===k),c=e.filter(done).map(x=>({rn:net(x),hit:x.hit}));return {k,e,c,st:stats(c)}});
+  const rows=log.filter(x=>x.hz===hz).slice(-60).reverse();
+  const stLabel=x=>x.status==='pending'?'<span class="st wait">Väntar på entry</span>':x.status==='open'?'<span class="st open">Öppen</span>':x.status==='missed'?'<span class="st wait">Ej triggad</span>':`<span class="res ${x.res}">${resLabel({res:x.res,hit:x.hit,rn:net(x)})}</span>`;
+  const withTime=true;
+  out.innerHTML=`
+    <div class="bt-card"><h3 class="sec-t"><span>Alla horisonter</span><span>${log.length} loggade förslag sedan ${fmtDate(Math.min(...log.map(x=>x.t0)),false)}</span></h3>
+      <div class="bt-scroll"><table class="bt-tbl"><thead><tr><th>Horisont</th><th>Loggade</th><th>Väntar / öppna</th><th>Ej triggade</th><th>Avslutade</th><th>Nådde TP1</th><th>Vinnande</th><th>Snitt R netto</th><th>Summa R</th></tr></thead><tbody>
+      ${byHz.map(({k,e,c,st})=>`<tr><td>${HZ[k].t}</td><td>${e.length}</td><td>${e.filter(x=>x.status==='pending'||x.status==='open').length}</td><td>${e.filter(x=>x.status==='missed').length}</td><td>${c.length}</td><td>${pctTxt0(st.tp1,st.n)}</td><td>${pctTxt0(st.win,st.n)}</td><td class="${st.sum>=0?'pos':'neg'}">${st.avg==null?'–':sgn(st.avg,f2)}</td><td class="${st.sum>=0?'pos':'neg'}">${st.n?sgn(st.sum):'–'}</td></tr>`).join('')}
+      </tbody></table></div></div>
+    <div class="bt-card" style="margin-top:20px"><h3 class="sec-t"><span>Loggade förslag · ${HZ[hz].t}</span><span>de 60 senaste</span></h3>
+      <div class="bt-scroll"><table class="bt-tbl"><thead><tr><th>Loggad</th><th>Plats</th><th>Instrument</th><th>Poäng</th><th>Kurs</th><th>Entry</th><th>Stop loss</th><th>TP1</th><th>Status</th><th>R netto</th></tr></thead><tbody>
+      ${rows.map(x=>`<tr><td>${fmtDate(x.t0,withTime)}</td><td>${x.rank}</td><td><span class="dir ${x.dir}">${x.dir==='L'?'L':'K'}</span> ${esc(x.sym)}</td><td>${x.score}</td><td>${f2(x.price)}</td><td>${f2(x.entry)}</td><td>${f2(x.sl)}</td><td>${f2(x.tp[0])}</td><td>${stLabel(x)}</td><td class="${done(x)?(net(x)>=0?'pos':'neg'):''}">${done(x)?sgn(net(x),f2):'–'}</td></tr>`).join('')||'<tr><td colspan="10">Inga loggade förslag för den här horisonten än.</td></tr>'}
+      </tbody></table></div></div>
+    <p class="bt-note">Varje förslag följs från tidpunkten det loggades: order vid entrynivån, ⅓ säljs vid varje mål, stop loss och tidsgräns som i simuleringen. Intradag följs på 5-minutersdata, vecka på timdata och längre horisonter på dagsdata. Kostnad ${f2(cost)} % av positionen tur och retur.</p>`;
 }
 
 let current=null;
@@ -1198,7 +1182,12 @@ document.querySelectorAll('.nav a[data-view]').forEach(a=>a.addEventListener('cl
   render();window.scrollTo({top:0,behavior:'auto'});
 }));
 document.getElementById('nav-metod').addEventListener('click',()=>{if(state.view!=='analys'){state.view='analys';render()}});
-document.getElementById('bt-min').addEventListener('change',()=>{if(state.view==='backtest')renderBacktest()});
+['bt-min','bt-cost'].forEach(id=>document.getElementById(id).addEventListener('change',()=>{if(state.view==='backtest')renderBacktest()}));
+document.getElementById('bt-var').addEventListener('change',e=>{BTUI.variant=e.target.value;renderBacktest()});
+document.getElementById('bt').addEventListener('click',e=>{
+  const tab=e.target.closest('[data-bttab]');if(tab){BTUI.tab=tab.dataset.bttab;renderBacktest();return}
+  const row=e.target.closest('tr[data-var]');if(row){BTUI.variant=row.dataset.var;renderBacktest()}
+});
 document.addEventListener('keydown',e=>{const tr=e.target.closest('tr[data-sel]');if(tr&&(e.key==='Enter'||e.key===' ')){e.preventDefault();tr.click()}
   const tab=e.target.closest('[data-hz]');if(tab&&(e.key==='ArrowRight'||e.key==='ArrowLeft')){const i=HZ_ORDER.indexOf(state.hz)+(e.key==='ArrowRight'?1:-1);if(HZ_ORDER[i]){state.hz=HZ_ORDER[i];state.sel=null;state.ins=null;render();document.getElementById('tab-'+state.hz).focus()}}});
 document.addEventListener('change',e=>{
@@ -1299,7 +1288,7 @@ async function fetchParts(base,auth){
   let dekRaw=null;
   if(auth){dekRaw=await unwrapDek(auth,session);if(!dekRaw)return 'locked'}
   const manifest=await getJSON(base+'manifest.json');
-  const parts=await Promise.all(['intra','hour','daily'].map(async p=>{
+  const parts=await Promise.all(['intra','hour','daily','log'].map(async p=>{
     const hit=partCache[p];if(manifest&&hit&&manifest[p]&&hit.gen===manifest[p])return hit.data;
     let d=null;
     if(auth){const bx=await getJSON(base+p+'.enc.json');if(bx){try{d=JSON.parse(new TextDecoder().decode(await openBox(dekRaw,bx)))}catch(e){}}}
@@ -1307,7 +1296,9 @@ async function fetchParts(base,auth){
     if(d)partCache[p]={gen:d.generated,data:d};
     return d;
   }));
-  return mergeParts(parts)||(auth?null:mergeParts([await getJSON(base+'market.json')]));
+  const merged=mergeParts(parts)||(auth?null:mergeParts([await getJSON(base+'market.json')]));
+  const lg=parts[3];if(merged&&lg){merged.log=lg;merged.parts.log=lg.generated}
+  return merged;
 }
 async function loadData(){
   if(loading)return;loading=true;
@@ -1336,6 +1327,7 @@ function applyData(d){
   if(changed){
     for(const [sym,x] of Object.entries(d.symbols)){if(T[sym]&&x.last){T[sym][3]=x.last;if(x.prevClose)T[sym][4]=(x.last/x.prevClose-1)*100}}
     for(const k in cache)delete cache[k];
+    btMemo={};
     const b=document.getElementById('badge');b.textContent='Riktig kursdata · case-texter exempel';b.classList.add('ok');
     renderStrip();render();
   }

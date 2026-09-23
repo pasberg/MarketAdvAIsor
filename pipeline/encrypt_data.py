@@ -30,7 +30,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 ITERATIONS = 250_000
 SALT_PREFIX = b"marketadvaisor-v1:"
-PARTS = ("intra", "hour", "daily")
+PARTS = ("intra", "hour", "daily", "log")
 
 
 def b64(b: bytes) -> str:
