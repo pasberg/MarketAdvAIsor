@@ -196,6 +196,22 @@ button,select{font:inherit;color:inherit}
 .ins-tag.rec{background:var(--up-soft);color:var(--up)} .ins-tag.alt{background:var(--accent-soft);color:var(--accent)} .ins-tag.no{background:var(--down-soft);color:var(--down)}
 .ins p{margin:4px 0 0;font-size:12.5px;color:var(--muted)}
 .ins-m{display:flex;gap:14px;margin-top:6px;font-size:12px}
+.ins-sub{font-weight:500;font-size:11.5px;color:var(--muted);margin-left:4px}
+.crit{margin:8px 0 0;padding:8px 10px 8px 26px;background:var(--surface-2);border-radius:8px;font-size:12px;display:grid;gap:2px}
+.crit li::marker{color:var(--faint)}
+.avz{display:inline-block;margin-top:8px;font-size:12.5px;font-weight:600;text-decoration:none}
+.avz:hover{text-decoration:underline}
+.trade-band{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:12px 22px 14px;border-top:1px solid var(--line-2);background:var(--surface-2)}
+.tb-l{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
+.tb-btns{display:flex;flex-wrap:wrap;gap:8px}
+.tb-btn{display:flex;flex-direction:column;gap:0;text-decoration:none;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:6px 12px;line-height:1.3}
+.tb-btn:hover{border-color:var(--accent)}
+.tb-btn span{font-size:13px;font-weight:600}
+.tb-btn small{font-size:11px;color:var(--muted)}
+.tb-btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.tb-btn.primary small{color:color-mix(in srgb,var(--accent-ink) 75%,transparent)}
+.wl-avz{font-size:11.5px;font-weight:600;text-decoration:none;margin-left:4px;white-space:nowrap}
+.wl-avz:hover{text-decoration:underline}
 .calc{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .calc label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:500}
 .calc label.full{grid-column:1/-1}
@@ -317,7 +333,7 @@ table.wl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
     <div class="wt" id="wt"></div>
   </section>
 
-  <p class="disc">Mockup med fiktiva kurser och analyser. Inget innehåll utgör investeringsrådgivning. Hävstångsprodukter kan förlora hela sitt värde snabbt. Historisk avkastning är ingen garanti för framtida avkastning. Grafer: TradingView Lightweight Charts™.</p>
+  <p class="disc">Mockup med fiktiva kurser och analyser. Inget innehåll utgör investeringsrådgivning. Hävstångsprodukter kan förlora hela sitt värde snabbt. Historisk avkastning är ingen garanti för framtida avkastning. Länkar till Avanza, TradingView och MarketWatch är genvägar till respektive sajt; mockupen har ingen koppling till dem. Grafer: TradingView Lightweight Charts™.</p>
 </main>
 
 <script>
@@ -374,6 +390,20 @@ const T={
   NOKIA:['Nokia','Helsingfors','EUR',4.62,.9,'nord','nokia','fi']
 };
 const FX={SEK:1,USD:9.40,DKK:1.47,NOK:.93,EUR:11.0};
+// Avanza: [orderbook id (verified) or null → search, name used in Avanza's product names]
+const AVZ={NVDA:[4478,'NVIDIA'],MSFT:[3873,'MICROSOFT'],AAPL:[null,'APPLE'],AMZN:[3986,'AMAZON'],META:[350795,'META'],AVGO:[369636,'BROADCOM'],
+  AMD:[529720,'AMD'],GOOGL:[472095,'ALPHABET'],TSLA:[238449,'TESLA'],COST:[null,'COSTCO'],NFLX:[null,'NETFLIX'],JPM:[null,'JPMORGAN'],
+  LLY:[4026,'LILLY'],XOM:[4013,'EXXON'],CAT:[null,'CATERPILLAR'],UNH:[4323,'UNITEDHEALTH'],V:[29747,'VISA'],
+  'VOLV-B':[5269,'VOLVO'],'ATCO-A':[5234,'ATLAS'],'ERIC-B':[null,'ERICSSON'],'SAAB-B':[5401,'SAAB'],'INVE-B':[5247,'INVESTOR'],
+  'SEB-A':[null,'SEB'],'ASSA-B':[5271,'ASSA'],SAND:[5471,'SANDVIK'],'HM-B':[null,'HM'],EVO:[null,'EVOLUTION'],ABB:[null,'ABB'],
+  'NDA-SE':[null,'NORDEA'],'NOVO-B':[52300,'NOVO'],DSV:[null,'DSV'],VWS:[null,'VESTAS'],EQNR:[null,'EQUINOR'],MOWI:[null,'MOWI'],
+  NESTE:[null,'NESTE'],KNEBV:[null,'KONE'],NOKIA:[null,'NOKIA']};
+const AVZ_BASE='https://www.avanza.se';
+const avzStock=s=>{const [id]=AVZ[s];return id?`${AVZ_BASE}/aktier/om-aktien.html/${id}`:`${AVZ_BASE}/sok.html?query=${encodeURIComponent(T[s][0])}`};
+const avzDir=L=>L?'LONG':'SHORT';
+const avzCert=(s,L)=>`${AVZ_BASE}/borshandlade-produkter/certifikat-torg/lista.html?name=${encodeURIComponent(AVZ[s][1])}&directions=${avzDir(L)}&sortField=LEVERAGE&sortOrder=DESCENDING`;
+const avzMini=(s,L)=>`${AVZ_BASE}/borshandlade-produkter/warranter-torg/lista.html?name=${encodeURIComponent(AVZ[s][1])}&warrantTypes=MINI_FUTURE&directions=${avzDir(L)}&sortField=TOTAL_VALUE_TRADED&sortOrder=DESCENDING`;
+const avzWarr=s=>`${AVZ_BASE}/borshandlade-produkter/warranter-torg/lista.html?name=${encodeURIComponent(AVZ[s][1])}&sortField=TOTAL_VALUE_TRADED&sortOrder=DESCENDING`;
 
 // top: [sym, dir, retracement, setup, thesis, scores[TA,FA,EW,MOM,FIB,SENT], risk]
 // watch: [sym, dir, retracement, setup, note, scores, status]
@@ -581,26 +611,44 @@ function signals(m){
     {txt:sc[5]>=74?(L?'Positivt optionsflöde; blankningen minskar.':'Put-flödet ökar; insiders är nettosäljare.'):sc[5]>=62?'Neutralt sentiment; inga extrema positioneringar.':'Svagt intresse — låg volym i optioner.',ind:[`P/C ${L?(sc[5]>=74?'0,62':'0,85'):'1,24'}`]}
   ];
 }
-// Suitable instruments per horizon
+// Suitable instruments per horizon, with search criteria and Avanza links
 function instruments(m){
-  const L=m.s>0,hz=m.hz,e=m.lv.entry,tp2=Math.abs(m.lv.tp2-e)/e*100,sl=m.risk/e*100;
-  const cLev=sl<.6?5:3;
-  const finD=Math.max(m.risk*1.6,e*({intradag:.10,vecka:.15}[hz]||.33));
-  const fin=e-(L?1:-1)*finD,mLev=Math.round(e/finD*10)/10;
-  const cert={id:'cert',lev:cLev,name:`${L?'Bull':'Bear'}-certifikat ×${cLev}`,
-    rec:`Daglig hävstång utan knock-out. När positionen stängs samma dag uppstår ingen volatilitetsförlust — därför förstahandsvalet intradag.`,
-    no:'Hävstången räknas om varje dag. Hålls positionen flera dagar i en fram-och-tillbaka-marknad tappar certifikatet värde (volatilitetsförlust).'};
-  const mini={id:'mini',lev:mLev,name:`Mini ${L?'long':'short'} ≈ ×${f1(mLev)}`,
-    rec:`Finansieringsnivå ${f2(fin)} ligger bortom stop loss, så knock-out nås inte innan SL. Ingen daglig omviktning.`};
-  const stock={id:'stock',lev:1,name:'Aktien',rec:L?'Ingen hävstång, ingen löptid — rätt verktyg för längre case.':'Blankning av aktien kräver lånade aktier; en bear-produkt är ofta enklare.'};
-  const warr={id:'warr',lev:3,name:`${L?'Köp':'Sälj'}warrant, lång löptid`,rec:'Minst 12 månaders löptid, delta ≈ 0,6. Förlusten begränsas till insatsen men tidsvärdet kostar.',
-    no:'Tidsvärde och bred spread äter vinsten på korta rörelser.'};
-  const eff=x=>({tp:x.lev*tp2,sl:-x.lev*sl});
-  const R=(x,tag,txt)=>Object.assign({},x,{tag,txt},eff(x));
-  if(hz==='intradag')return [R(cert,'rec',cert.rec),R(mini,'alt',mini.rec),R(warr,'no',warr.no)];
-  if(hz==='vecka')return [R(mini,'rec',mini.rec),R(stock,'alt',stock.rec),R(cert,'no',cert.no)];
-  if(hz==='manad'||hz==='kvartal')return [R(stock,'rec',stock.rec),R(mini,'alt',`Låg hävstång (≈ ×${f1(mLev)}). `+mini.rec),R(cert,'no',cert.no)];
-  return [R(stock,'rec',stock.rec),R(warr,'alt',warr.rec),R(cert,'no',cert.no)];
+  const L=m.s>0,hz=m.hz,e=m.lv.entry,sym=m.item.s,nm=AVZ[sym][1],cur=m.t[2];
+  const tp2=Math.abs(m.lv.tp2-e)/e*100,sl=m.risk/e*100;
+  const eff=lev=>({tp:lev*tp2,sl:-lev*sl});
+  const mini=(K,label)=>{const finD=Math.max(m.risk*1.6,e*K),fin=e-(L?1:-1)*finD,lev=Math.round(e/finD*10)/10,ko=fin+(L?1:-1)*finD*.08;
+    return {id:'mini'+label,lev,name:`Mini ${L?'long':'short'} ${nm} · ≈ ×${f1(lev)}`,
+      crit:[`Finansieringsnivå ${L?'≤':'≥'} ${f2(fin)} ${cur}`,`Stop loss-nivå (knock-out) ${L?'under':'över'} ${f2(ko)} — bortom din SL ${f2(m.lv.sl)}`,'Välj den mest omsatta'],
+      link:{href:avzMini(sym,L),label:`Mini ${L?'long':'short'} på ${nm} hos Avanza`},...eff(lev)}};
+  const cert=(lev,label)=>({id:'cert'+lev,lev,name:`${L?'Bull':'Bear'} ${nm} ×${lev}`,
+      crit:[`Daglig hävstång ×${lev}`,'Spread under 0,3 %','Emittent med marknadsgarant hela dagen'],
+      link:{href:avzCert(sym,L),label:`${L?'Bull':'Bear'}-certifikat på ${nm} hos Avanza (högst hävstång först)`},...eff(lev),sub:label});
+  const stock={id:'stock',lev:1,name:`${T[sym][0]} (aktien)`,crit:[],link:{href:avzStock(sym),label:`${T[sym][0]} hos Avanza`},...eff(1)};
+  const warr={id:'warr',lev:3,name:`${L?'Köp':'Sälj'}warrant ${nm}, lång löptid`,crit:['Löptid minst 12 månader','Delta runt 0,6','Lösenpris nära dagens kurs'],
+      link:{href:avzWarr(sym),label:`Warranter på ${nm} hos Avanza`},...eff(3)};
+  const T_=(x,tag,txt)=>Object.assign({},x,{tag,txt});
+  const certNo='Hävstången räknas om varje dag. Hålls positionen flera dagar i en marknad som går fram och tillbaka tappar certifikatet värde (volatilitetsförlust).';
+  if(hz==='intradag'){
+    const hi=sl<.5?10:5,lo=hi===10?5:3;
+    return [
+      T_(cert(hi,'Hög hävstång'),'rec',`Högst avkastning per insatt krona. Ingen knock-out och ingen volatilitetsförlust när positionen stängs samma dag. En rörelse till SL kostar ${f1(hi*sl)} % av insatsen.`),
+      T_(cert(lo,'Balanserad'),'alt',`Samma produkttyp med lägre hävstång — mer marginal för brus runt entry.`),
+      T_(mini(.10,'i'),'alt','Linjär hävstång utan daglig omviktning. Kräver att finansieringsnivån ligger långt bortom SL.'),
+      T_(warr,'no','Tidsvärde och bred spread äter vinsten på korta rörelser.')];
+  }
+  if(hz==='vecka')return [
+      T_(mini(.12,'a'),'rec','Förstahandsvalet för en swing på några dagar: ingen daglig omviktning, hävstången följer kursen och knock-out ligger bortom din SL.'),
+      T_(mini(.20,'k'),'alt','Lägre hävstång och längre avstånd till knock-out — tål större svängningar under veckan.'),
+      T_(stock,'alt',L?'Utan hävstång.':'Blankning av aktien kräver lånade aktier; en mini short är ofta enklare.'),
+      T_(cert(5,''),'no',certNo)];
+  if(hz==='manad'||hz==='kvartal')return [
+      T_(stock,'rec',L?'Ingen hävstång och ingen löptid — rätt verktyg för ett case över flera veckor.':'För en kort position: mini short med låg hävstång eller blankning.'),
+      T_(mini(.33,'l'),'alt','Låg hävstång. Kontrollera finansieringskostnaden — den äter avkastning över tid.'),
+      T_(cert(3,''),'no',certNo)];
+  return [
+      T_(stock,'rec','Ingen hävstång och ingen löptid — rätt verktyg för ett långsiktigt case.'),
+      T_(warr,'alt','Förlusten begränsas till insatsen, men tidsvärdet kostar. Välj lång löptid.'),
+      T_(cert(3,''),'no',certNo)];
 }
 
 // ---------- state
@@ -659,7 +707,7 @@ function renderPicks(){
   document.getElementById('wl').innerHTML=w.length?w.map(m=>{
     const dist=(m.lv.entry-m.P)/m.P*100,cur=state.sel&&state.sel.kind==='watch'&&state.sel.s===m.item.s;
     return `<tr data-sel="watch:${m.item.s}" tabindex="0" aria-current="${!!cur}">
-      <td><b class="num">${esc(m.item.s)}</b> <span style="color:var(--muted)">${esc(m.t[0])}</span></td>
+      <td><b class="num">${esc(m.item.s)}</b> <span style="color:var(--muted)">${esc(m.t[0])}</span> <a class="wl-avz" href="${avzStock(m.item.s)}" target="_blank" rel="noopener" aria-label="${esc(m.t[0])} hos Avanza">Avanza ↗</a></td>
       <td><span class="dir ${m.item.dir}">${m.item.dir==='L'?'LÅNG':'KORT'}</span></td>
       <td>${esc(m.item.setup)}</td>
       <td class="r num">${f2(m.P)}</td><td class="r num">${f2(m.lv.entry)}</td>
@@ -778,7 +826,11 @@ function renderDetail(m){
     </div>
     <div class="chart-wrap"><div class="legend" id="legend"></div><div id="chart"></div></div>
     <div class="chart-foot"><span>Streckade linjer: blå = entryzon, röd = SL, grön = TP · svart streckad = projicerad våg 5</span>
-      <span class="links"><a class="mw" href="${tvUrl(item.s)}" target="_blank" rel="noopener">TradingView ↗</a><a class="mw" href="${mwUrl(item.s)}" target="_blank" rel="noopener">MarketWatch ↗</a></span></div>
+      <span class="links"><a class="mw" href="${avzStock(item.s)}" target="_blank" rel="noopener">Avanza ↗</a><a class="mw" href="${tvUrl(item.s)}" target="_blank" rel="noopener">TradingView ↗</a><a class="mw" href="${mwUrl(item.s)}" target="_blank" rel="noopener">MarketWatch ↗</a></span></div>
+  </div>
+  <div class="trade-band">
+    <span class="tb-l">Handla via Avanza</span>
+    <div class="tb-btns">${usable.map((x,i)=>`<a class="tb-btn${i===0?' primary':''}" href="${x.link.href}" target="_blank" rel="noopener"><span>${esc(x.name)}</span><small>${{rec:'Rekommenderas',alt:'Alternativ'}[x.tag]}${x.lev>1?` · TP2 ${sgn(x.tp)} %`:''}</small></a>`).join('')}${usable.some(x=>x.id==='stock')?'':`<a class="tb-btn" href="${avzStock(item.s)}" target="_blank" rel="noopener"><span>${esc(t[0])} (aktien)</span><small>Underliggande</small></a>`}</div>
   </div>
   <div class="d-grid">
     <section>
@@ -814,9 +866,9 @@ function renderDetail(m){
       <p class="inval">Caset ogiltigförklaras vid ${intra?'handel':'stängning'} ${s>0?'under':'över'} <b class="num">${f2(lv.sl)}</b> ${cur}${intra?` — eller vid tidsstoppet ${hm(ex)}`:''}.</p>
     </section>
     <section>
-      <h3 class="sec-t"><span>Instrument</span><span>Effekt vid TP2 / SL</span></h3>
+      <h3 class="sec-t"><span>${intra?'Certifikat & hävstång':m.hz==='vecka'?'Mini futures':'Instrument'}</span><span>Effekt vid TP2 / SL</span></h3>
       <div class="instr">
-        ${ins.map(x=>`<div class="ins${x.tag==='no'?' avoid':''}"><div class="ins-h"><b>${esc(x.name)}</b><span class="ins-tag ${x.tag}">${{rec:'Rekommenderas',alt:'Alternativ',no:'Undvik'}[x.tag]}</span></div><p>${esc(x.txt)}</p>${x.tag!=='no'?`<div class="ins-m num"><span class="pos">TP2 ${sgn(x.tp)} %</span><span class="neg">SL ${sgn(x.sl)} %</span></div>`:''}</div>`).join('')}
+        ${ins.map(x=>`<div class="ins${x.tag==='no'?' avoid':''}"><div class="ins-h"><b>${esc(x.name)}${x.sub?` <span class="ins-sub">${esc(x.sub)}</span>`:''}</b><span class="ins-tag ${x.tag}">${{rec:'Rekommenderas',alt:'Alternativ',no:'Undvik'}[x.tag]}</span></div><p>${esc(x.txt)}</p>${x.tag!=='no'?`<div class="ins-m num"><span class="pos">TP2 ${sgn(x.tp)} %</span><span class="neg">SL ${sgn(x.sl)} %</span></div>${x.crit.length?`<ul class="crit">${x.crit.map(c=>`<li>${esc(c)}</li>`).join('')}</ul>`:''}<a class="avz" href="${x.link.href}" target="_blank" rel="noopener">${esc(x.link.label)} ↗</a>`:''}</div>`).join('')}
       </div>
       <h3 class="sec-t"><span>Positionsstorlek</span></h3>
       <div class="calc">
@@ -825,7 +877,7 @@ function renderDetail(m){
         <label for="ins" class="full">Instrument<select id="ins">${usable.map(x=>`<option value="${x.id}" ${x.id===state.ins?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>
       </div>
       <div class="calc-out" id="calc-out"></div>
-      <p class="note">${cur!=='SEK'?`Omräknat med 1 ${cur} = ${f2(FX[cur])} SEK. `:''}Förenklat: ignorerar spread, courtage och finansieringskostnad. Warrantens hävstång är en uppskattning.</p>
+      <p class="note">Länkarna öppnar Avanzas produktlistor filtrerade på underliggande och riktning — välj en produkt som uppfyller kriterierna ovan. ${cur!=='SEK'?`Omräknat med 1 ${cur} = ${f2(FX[cur])} SEK. `:''}Förenklat: ignorerar spread, courtage och finansieringskostnad. Warrantens hävstång är en uppskattning.</p>
     </section>
   </div>`;
   drawChart(m);calc(m);
@@ -855,6 +907,7 @@ function render(){
 
 // ---------- events
 document.addEventListener('click',e=>{
+  if(e.target.closest('a'))return;
   const hz=e.target.closest('[data-hz]');if(hz){state.hz=hz.dataset.hz;state.sel=null;state.ins=null;save();try{history.replaceState(null,'','#'+state.hz)}catch(_){}render();return}
   const mk=e.target.closest('[data-mkt]');if(mk){state.mkt=mk.dataset.mkt;state.sel=null;render();return}
   const sel=e.target.closest('[data-sel]');if(sel){const [kind,s]=sel.dataset.sel.split(':');state.sel={kind,s};state.ins=null;render();
