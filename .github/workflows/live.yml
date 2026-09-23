@@ -1,0 +1,53 @@
+name: Live data
+
+# Publishes fresh data every 5 minutes during market hours (see pipeline/live_loop.sh).
+# One run lasts up to ~5 h 40 min and then starts the next run itself, so it does not
+# depend on GitHub's cron, which can be delayed or skipped. The daily cron below only
+# starts the first run of the day; it can also be started by hand (Run workflow).
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "50 5 * * 1-5"
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: live
+  cancel-in-progress: false
+
+jobs:
+  loop:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pipeline/requirements.txt
+      - run: pip install -r pipeline/requirements.txt
+
+      - name: Restore data from earlier runs
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: data-${{ github.run_id }}
+          restore-keys: data-
+
+      - name: Publish every 5 minutes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SITE_USERS: ${{ secrets.SITE_USERS }}
+        run: bash pipeline/live_loop.sh
+
+      - name: Save data for later runs
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: data-${{ github.run_id }}

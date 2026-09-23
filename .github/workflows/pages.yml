@@ -1,11 +1,8 @@
 name: Pages
 
 # Fetches price data and publishes the site to the gh-pages branch (GitHub Pages).
-# Data parts refresh at different rates (times in UTC; add 2 h for Swedish summer time):
-#   intra  every 5 min on weekdays 06:00–20:55   (08:00–22:55 CEST)
-#   hour   at :01 and :31 in the same window
-#   daily  15:50 and 20:35 (after the Stockholm and US closes) and on every push/manual run
-# Scheduled runs can start several minutes late when GitHub is busy.
+# Runs when the page or pipeline changes (or by hand). The 5-minute refresh during
+# market hours is done by live.yml.
 # Login: the data files are encrypted for the users in the SITE_USERS secret
 # (one "user:password" per line); see pipeline/encrypt_data.py.
 
@@ -20,11 +17,6 @@ on:
       parts:
         description: "Delar att hämta (intra,hour,daily)"
         default: "intra,hour,daily"
-  schedule:
-    - cron: "*/5 6-20 * * 1-5"
-    - cron: "1,31 6-20 * * 1-5"
-    - cron: "50 15 * * 1-5"
-    - cron: "35 20 * * 1-5"
 
 permissions:
   contents: write
@@ -43,16 +35,7 @@ jobs:
 
       - name: Choose data parts
         id: parts
-        run: |
-          case "${{ github.event_name }}/${{ github.event.schedule }}" in
-            "schedule/*/5 6-20 * * 1-5") p="intra" ;;
-            "schedule/1,31 6-20 * * 1-5") p="intra,hour" ;;
-            schedule/*) p="intra,hour,daily" ;;
-            workflow_dispatch/*) p="${{ github.event.inputs.parts }}" ;;
-            *) p="intra,hour,daily" ;;
-          esac
-          echo "parts=$p" >> "$GITHUB_OUTPUT"
-          echo "Delar: $p"
+        run: echo "parts=${{ github.event.inputs.parts || 'intra,hour,daily' }}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-python@v5
         with:
@@ -73,37 +56,14 @@ jobs:
           key: data-${{ github.run_id }}
           restore-keys: data-
 
-      - name: Fetch prices
-        run: |
-          parts="${{ steps.parts.outputs.parts }}"
-          # a part that was never fetched (empty cache) is fetched now as well
-          for p in intra hour daily; do [ -f "data/$p.json" ] || parts="$parts,$p"; done
-          python pipeline/fetch_market_data.py --out-dir data --parts "$parts"
+      - name: Fetch, encrypt and publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SITE_USERS: ${{ secrets.SITE_USERS }}
+        run: bash pipeline/publish.sh "${{ steps.parts.outputs.parts }}"
 
       - name: Save data for later runs
         uses: actions/cache/save@v4
         with:
           path: data
           key: data-${{ github.run_id }}
-
-      - name: Encrypt data
-        env:
-          SITE_USERS: ${{ secrets.SITE_USERS }}
-        run: python pipeline/encrypt_data.py --src data --dst site/data
-
-      - name: Build page
-        run: python pipeline/build_site.py --src mockup/index.html --out site/index.html
-
-      - name: Publish to gh-pages
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          cd site
-          git init -q -b gh-pages
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -q -m "Publish site ($(date -u +%Y-%m-%dT%H:%MZ), ${{ steps.parts.outputs.parts }})"
-          # a single-commit branch: history does not grow with every 5-minute update
-          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
-          ls -la data
