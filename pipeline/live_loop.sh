@@ -21,6 +21,8 @@ while in_window && [ "$(date +%s)" -lt "$deadline" ]; do
       parts="$parts,hour,daily"; done_daily="$done_daily $slot"
     fi
   done
+  # pick up code pushed since the run started (data/ and site/ are not tracked)
+  git fetch -q origin "$GITHUB_REF_NAME" && git reset -q --hard FETCH_HEAD || echo "::warning::Kunde inte hämta senaste koden"
   bash pipeline/publish.sh "$parts" || echo "::warning::Publicering misslyckades ($parts) — försöker igen om 5 min"
   # sleep until the next 5-minute mark
   now=$(date +%s); sleep $(( 300 - now % 300 + 5 ))
