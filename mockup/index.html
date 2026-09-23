@@ -390,14 +390,14 @@ const T={
   NOKIA:['Nokia','Helsingfors','EUR',4.62,.9,'nord','nokia','fi']
 };
 const FX={SEK:1,USD:9.40,DKK:1.47,NOK:.93,EUR:11.0};
-// Avanza: [orderbook id (verified) or null → search, name used in Avanza's product names]
-const AVZ={NVDA:[4478,'NVIDIA'],MSFT:[3873,'MICROSOFT'],AAPL:[null,'APPLE'],AMZN:[3986,'AMAZON'],META:[350795,'META'],AVGO:[369636,'BROADCOM'],
-  AMD:[529720,'AMD'],GOOGL:[472095,'ALPHABET'],TSLA:[238449,'TESLA'],COST:[null,'COSTCO'],NFLX:[null,'NETFLIX'],JPM:[null,'JPMORGAN'],
-  LLY:[4026,'LILLY'],XOM:[4013,'EXXON'],CAT:[null,'CATERPILLAR'],UNH:[4323,'UNITEDHEALTH'],V:[29747,'VISA'],
-  'VOLV-B':[5269,'VOLVO'],'ATCO-A':[5234,'ATLAS'],'ERIC-B':[null,'ERICSSON'],'SAAB-B':[5401,'SAAB'],'INVE-B':[5247,'INVESTOR'],
-  'SEB-A':[null,'SEB'],'ASSA-B':[5271,'ASSA'],SAND:[5471,'SANDVIK'],'HM-B':[null,'HM'],EVO:[null,'EVOLUTION'],ABB:[null,'ABB'],
-  'NDA-SE':[null,'NORDEA'],'NOVO-B':[52300,'NOVO'],DSV:[null,'DSV'],VWS:[null,'VESTAS'],EQNR:[null,'EQUINOR'],MOWI:[null,'MOWI'],
-  NESTE:[null,'NESTE'],KNEBV:[null,'KONE'],NOKIA:[null,'NOKIA']};
+// Avanza: [orderbook id (verified via avanza.se), name used in Avanza's product names]
+const AVZ={NVDA:[4478,'NVIDIA'],MSFT:[3873,'MICROSOFT'],AAPL:[3323,'APPLE'],AMZN:[3986,'AMAZON'],META:[350795,'META'],AVGO:[369636,'BROADCOM'],
+  AMD:[529720,'AMD'],GOOGL:[472095,'ALPHABET'],TSLA:[238449,'TESLA'],COST:[3378,'COSTCO'],NFLX:[185896,'NETFLIX'],JPM:[3574,'JPMORGAN'],
+  LLY:[4026,'LILLY'],XOM:[4013,'EXXON'],CAT:[4124,'CATERPILLAR'],UNH:[4323,'UNITEDHEALTH'],V:[29747,'VISA'],
+  'VOLV-B':[5269,'VOLVO'],'ATCO-A':[5234,'ATLAS'],'ERIC-B':[5240,'ERICSSON'],'SAAB-B':[5401,'SAAB'],'INVE-B':[5247,'INVESTOR'],
+  'SEB-A':[5255,'SEB'],'ASSA-B':[5271,'ASSA'],SAND:[5471,'SANDVIK'],'HM-B':[5364,'HM'],EVO:[549768,'EVOLUTION'],ABB:[5447,'ABB'],
+  'NDA-SE':[5249,'NORDEA'],'NOVO-B':[52300,'NOVO'],DSV:[52415,'DSV'],VWS:[52332,'VESTAS'],EQNR:[52626,'EQUINOR'],MOWI:[52507,'MOWI'],
+  NESTE:[52859,'NESTE'],KNEBV:[52862,'KONE'],NOKIA:[52784,'NOKIA']};
 const AVZ_BASE='https://www.avanza.se';
 const avzStock=s=>{const [id]=AVZ[s];return id?`${AVZ_BASE}/aktier/om-aktien.html/${id}`:`${AVZ_BASE}/sok.html?query=${encodeURIComponent(T[s][0])}`};
 const avzDir=L=>L?'LONG':'SHORT';
