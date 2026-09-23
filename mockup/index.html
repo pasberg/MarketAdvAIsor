@@ -734,7 +734,7 @@ function renderStrip(){
   document.getElementById('strip').innerHTML=IDX.map(([n,v,ch])=>{
     const ri=REAL&&REAL.indices[n];let a=[];
     if(REAL&&!ri)return `<div class="idx"><span class="n">${n}</span><span class="v num">—</span><span class="c num" style="color:var(--faint)">saknas</span></div>`;
-    if(ri){v=ri.last;ch=(ri.last/ri.prevClose-1)*100;a=ri.spark}
+    if(ri){v=ri.last;ch=(ri.last/ri.prevClose-1)*100;a=ri.spark;if(/OSEBX/.test(ri.yahoo||''))n='OSEBX'}
     else{const r=rng(hash(n));let x=0;for(let i=0;i<40;i++){x+=(r()-.5)+ch*.05;a.push(x)}}
     const cls=n==='VIX'?(ch>0?'down':'up'):(ch>=0?'up':'down');
     return `<div class="idx"><span class="n">${n}</span><span class="v num">${v>1000?f1(v):f2(v)}</span><span class="c num ${cls==='up'?'pos':'neg'}">${sgn(ch,f2)} %</span>${spark(a,cls,120,22,false)}</div>`}).join('');
