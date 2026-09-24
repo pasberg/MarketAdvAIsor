@@ -42,6 +42,7 @@ from restore_log import unseal  # noqa: E402
 
 BRANCH = "archive"
 BACKFILL_BELOW = 20  # days
+EXPORT_DAYS = 120  # days of bars handed to the calibration
 LOCAL = ZoneInfo("Europe/Stockholm")
 COMPLETE_AFTER = 22 * 60 + 30  # a run after 22:30 Stockholm time closes the day
 FIELDS = ("t", "o", "h", "l", "c", "v")
@@ -130,6 +131,8 @@ class Branch:
         return r if not check else r.stdout
 
     def read(self, path: str) -> bytes | None:
+        if path in self.changes:  # written in this run, not pushed yet
+            return self.changes[path]
         if not self.head:
             return None
         r = subprocess.run(["git", "show", f"{self.head}:{path}"], cwd=self.dir, capture_output=True)
@@ -215,6 +218,20 @@ def update(branch: Branch, users: dict[str, str], series: dict[str, dict], now: 
     return {"index": index, "written": written}
 
 
+def export_bars(branch: Branch, key: bytes, index: dict, days: int = EXPORT_DAYS) -> dict:
+    """The last `days` archived days as one series per instrument, for the calibration (not published)."""
+    out: dict[str, dict] = {}
+    for day in sorted(index["days"])[-days:]:
+        raw = branch.read(day_path(day))
+        if not raw:
+            continue
+        for sym, s in unpack(key, raw)["symbols"].items():
+            o = out.setdefault(sym, {k: [] for k in FIELDS})
+            for k in FIELDS:
+                o[k] += s[k]
+    return {"days": min(days, len(index["days"])), "symbols": out}
+
+
 def status(index: dict, now: datetime) -> dict:
     days = sorted(index["days"])
     return {"part": "archive", "generated": now.isoformat(timespec="seconds"), "days": len(days),
@@ -234,6 +251,7 @@ handelsdag. Nyckeln finns i `auth.json`, inlindad per konto i SITE_USERS. Ändra
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--data", default="data")
+    ap.add_argument("--export", help="skriv de senaste dagarnas staplar okrypterat hit (för kalibreringen, publiceras inte)")
     a = ap.parse_args()
     users = parse_users(os.environ.get("SITE_USERS", ""))
     token, repo = os.environ.get("GH_TOKEN"), os.environ.get("GITHUB_REPOSITORY")
@@ -257,6 +275,9 @@ def main() -> int:
             return 0
         res = update(branch, users, series, now)
         branch.commit_and_push(f"Arkiv {now:%Y-%m-%d %H:%M}Z: {', '.join(res['written']) or 'inga nya dagar'}")
+        if a.export:
+            bars = export_bars(branch, archive_key(branch, users), res["index"])
+            Path(a.export).write_text(json.dumps(bars, separators=(",", ":")), encoding="utf-8")
     st = status(res["index"], now)
     Path(a.data, "archive.json").write_text(json.dumps(st), encoding="utf-8")
     print(f"Arkiv: {st['days']} handelsdagar ({st['first']} – {st['last']}), {st['symbols']} instrument, "

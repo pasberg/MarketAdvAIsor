@@ -75,6 +75,8 @@ class Branch(unittest.TestCase):
         key = ar.archive_key(b, self.users)
         self.assertEqual(sorted(ar.unpack(key, raw)["symbols"]), ["X", "Y"])
         self.assertEqual(ar.status(r3["index"], datetime.now(timezone.utc))["days"], 1)
+        exported = ar.export_bars(b, key, r3["index"])
+        self.assertEqual(len(exported["symbols"]["X"]["t"]), 3)
 
     def test_an_unknown_account_cannot_open_the_archive(self):
         self.run_once({"X": bars(20720, [540])}, datetime(2026, 9, 24, 10, 0, tzinfo=timezone.utc))

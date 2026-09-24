@@ -21,7 +21,9 @@ fi
 
 # intraday archive: after each daily fetch (17:50 and 22:35), keep today's 5-minute bars
 if [[ "$parts" == *daily* ]]; then
-  python pipeline/intraday_archive.py --data data || echo "::warning::Intradagsarkivet misslyckades"
+  python pipeline/intraday_archive.py --data data --export data/archive_bars.json || echo "::warning::Intradagsarkivet misslyckades"
+  # measured hit rates per horizon and score, shown instead of a rule of thumb
+  node pipeline/calibrate.js --data data || echo "::warning::Kalibreringen misslyckades"
 fi
 # trading journals synced from the page (journal branch) -> encrypted site data
 python pipeline/journal_export.py data/journal.json || echo "::warning::Dagboken kunde inte exporteras"

@@ -694,7 +694,7 @@ const avzWarr=s=>`${AVZ_BASE}/borshandlade-produkter/warranter-torg/lista.html?n
 // top: [sym, dir, retracement, setup, thesis, scores[TA,FA,EW,MOM,FIB,SENT], risk]
 // watch: [sym, dir, retracement, setup, note, scores, status]
 const D=JSON.parse(document.getElementById('cases').textContent); // case texts and scores: see the JSON block above
-const STATUS={near:'Nära trigger',wait:'Väntar på rekyl',build:'Setup byggs',alt:'Strax utanför topp 5'};
+const STATUS={near:'Nära trigger',wait:'Väntar på rekyl',build:'Setup byggs',alt:'Strax utanför topp 5',stale:'Gårdagens data — väntar på öppning'};
 const OFF={near:.05,wait:.16,build:.10};
 const IDX=[['S&P 500',6612.4,.42],['Nasdaq 100',24310.8,.71],['OMXS30',2704.9,.35],['OMXC25',1641.2,-.18],['OBX',1472.6,-.52],['OMXH25',5018.3,.12],['VIX',15.8,-3.1]];
 
@@ -729,6 +729,8 @@ const nowMin=()=>{if(!REAL)return NOW_MIN;try{const [h,mi]=new Intl.DateTimeForm
 const staleTxt=m=>{if(HZ[m.hz].kind!=='intra')return '';const d=new Date(m.c[m.N-1].time*1000);
   let today;try{today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Stockholm',day:'numeric',month:'numeric'}).format(new Date())}catch(e){return ''}
   const bar=d.getUTCDate()+'/'+(d.getUTCMonth()+1);return today===bar?'':` · <b>visar senaste handelsdag ${d.getUTCDate()} ${['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'][d.getUTCMonth()]}</b>`};
+const todayStockholm=()=>{try{return new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Stockholm'}).format(new Date())}catch(e){return ''}};
+const barDay=t=>new Date(t*1000).toISOString().slice(0,10);
 const leftTxt=min=>{const d=min-nowMin();return d<=0?'stängd för idag':d<60?`${d} min kvar`:`${Math.floor(d/60)} h ${d%60} min kvar`};
 const tfLabel=(hz,s)=>{const k=HZ[hz].kind;return k==='intra'?(EX[T[s][1]].us?'1 min':'5 min'):k==='hour'?'1 timme':k==='day'?'1 dag':'1 vecka'};
 const cssVar=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -757,7 +759,8 @@ const ema=MAA.ema,toCandles=MAA.toCandles;
 function model(item,hz){
   const key=hz+'|'+item.s+'|'+item.kind+'|'+item.dir;
   if(cache[key])return cache[key];
-  return cache[key]=realModel(item,hz)||synthModel(item,hz,key);
+  // with real prices loaded, an instrument without enough data is left out rather than drawn from example data
+  return cache[key]=realModel(item,hz)||(REAL?null:synthModel(item,hz,key));
 }
 function synthModel(item,hz,key){
   const H=HZ[hz],t=T[item.s],s=item.dir==='L'?1:-1,P=t[3],R=P*H.vol,N=H.n;
@@ -819,6 +822,15 @@ function realModel(item,hz){
   return Object.assign(m,{t:T[item.s],tl:{t:times,fwd:H.fwd},marks,projLabel:'Mål',real:true});
 }
 // case rows plus automatic candidates for every instrument in the data the page can show
+// measured outcome of the rules for this horizon and score band (pipeline/calibrate.js); null without enough history
+// Looked up on the measured part of the score: fundamentals, Elliott and sentiment set to neutral 50, as for the
+// automatic candidates the history was measured on (hand-written case scores are not measured).
+function calibFor(hz,m){
+  const H=REAL&&REAL.calib&&REAL.calib.horizons[hz];if(!H||!m.sc)return null;
+  const eq=Math.round(m.sc.reduce((a,v,i)=>a+([1,2,5].includes(i)?50:v)*MAA.WEIGHTS[hz][i],0));
+  const b=H.bands.find(x=>eq>=x.lo&&eq<x.hi);
+  return b&&b.n>=30?Object.assign({cost:H.cost,eq},b):null;
+}
 const pool=hz=>{const sy=REAL&&REAL.symbols,known={};if(sy)for(const k in sy)if(T[k])known[k]=sy[k];return MAA.pool(D,hz,sy?known:null)};
 function signals(m){
   const {item,s,lv,t,hz,P}=m,L=s>0,sc=m.sc,cur=t[2],intra=hz==='intradag';
@@ -931,11 +943,14 @@ function renderHz(){
 function renderPicks(){
   const p=pool(state.hz),intra=state.hz==='intradag';
   // setups where the price already passed the stop loss go last (they are no longer valid)
-  const tops=MAA.bestPerSymbol(p.top.map(it=>model(it,state.hz))).sort((a,b)=>((b.valid!==false)-(a.valid!==false))||b.score-a.score);
-  const ranked=tops.filter(m=>inMkt(m.item.s)),shown=ranked.slice(0,5),extra=ranked.slice(5,15);
+  const tops=MAA.bestPerSymbol(p.top.map(it=>model(it,state.hz)).filter(Boolean)).sort((a,b)=>((b.valid!==false)-(a.valid!==false))||b.score-a.score);
+  // intraday: a setup from an earlier session (e.g. US stocks before 15:30) cannot be traded as shown
+  const fresh=m=>!intra||!m.real||barDay(m.c[m.N-1].time)===todayStockholm();
+  const inM=tops.filter(m=>inMkt(m.item.s)),ranked=inM.filter(fresh),shown=ranked.slice(0,5);
+  const extra=ranked.slice(5,15).concat(inM.filter(m=>!fresh(m)).slice(0,10).map(m=>Object.assign(m,{status:'stale'})));
   document.getElementById('pk-count').textContent=`Bästa ${shown.length} av ${ranked.length} kandidater`;
   const el=document.getElementById('picks');
-  if(!shown.length){el.innerHTML='<div class="empty">Inga top picks i vald marknad på den här horisonten. Se listan <a href="#bevakning">Att hålla koll på</a> nedan.</div>'}
+  if(!shown.length){el.innerHTML=intra&&inM.length?'<div class="empty">Inga intradagsförslag från dagens handel ännu. Varje instrument behöver 30 staplar: valutor från ca 10:30, Norden från ca 11:30 (5-minutersdata) och USA från ca 16:00 (1-minutsdata). Gårdagens setups står under <a href="#bevakning">Att hålla koll på</a>.</div>':'<div class="empty">Inga top picks i vald marknad på den här horisonten. Se listan <a href="#bevakning">Att hålla koll på</a> nedan.</div>'}
   else el.innerHTML=shown.map(m=>{
     const rank=ranked.indexOf(m)+1,t=m.t,cur=state.sel&&state.sel.kind==='top'&&state.sel.s===m.item.s;
     return `<button class="pick" data-sel="top:${m.item.s}" aria-current="${!!cur}">
@@ -944,7 +959,7 @@ function renderPicks(){
       <span class="pk-b"><span class="dir ${m.item.dir}">${m.item.dir==='L'?'LÅNG':'KORT'}</span><span>R/R <b class="num">${f1(m.rr[1])}</b></span>${intra?`<span class="exit">Stäng ${hm(exitMin(m.item.s))}</span>`:`<span class="mkt">${t[1]}</span>`}</span>
       <span class="pk-r">${spark(m.c.slice(-36).map(x=>x.close),m.s>0?'up':'down')}<span class="score-sm">${m.score}</span></span>
     </button>`}).join('');
-  const w=p.watch.map(it=>model(it,state.hz)).filter(m=>inMkt(m.item.s)).concat(extra).sort((a,b)=>b.score-a.score);
+  const w=p.watch.map(it=>model(it,state.hz)).filter(m=>m&&inMkt(m.item.s)).concat(extra).sort((a,b)=>b.score-a.score);
   document.getElementById('wl-count').textContent=`${w.length} instrument · ${HZ[state.hz].t.toLowerCase()}`;
   document.getElementById('wl').innerHTML=w.length?w.map(m=>{
     const dist=(m.lv.entry-m.P)/m.P*100,cur=state.sel&&state.sel.kind==='watch'&&state.sel.s===m.item.s;
@@ -1055,7 +1070,9 @@ function renderDetail(m){
     <div class="d-kpis">
       ${intra?`<div class="kpi exit-k"><span class="l">Stäng senast</span><span class="v sm">${hm(ex)} <span style="font-size:11px;color:var(--muted)">${leftTxt(ex)}</span></span></div>`:''}
       <div class="kpi"><span class="l">R/R (TP2)</span><span class="v">${f1(rr[1])}</span></div>
-      <div class="kpi"><span class="l">Träffchans</span><span class="v">${m.prob} %</span></div>
+      ${(()=>{const c=calibFor(m.hz,m);return c
+        ?`<div class="kpi" title="Andel av historiska signaler på ${H.t.toLowerCase()} med teknisk poäng ${c.lo}–${Math.min(c.hi-1,100)} (den här: ${c.eq}) som nådde TP1 efter att entry fyllts (${nf0.format(c.n)} affärer). Fundamental-, Elliott- och sentimentdelen ingår inte — den är inte mätt."><span class="l">Nådde TP1 förr</span><span class="v">${Math.round(c.tp1*100)} %</span></div>`
+        :`<div class="kpi" title="Ingen mätt historik för den här poängen ännu — schablon ur poängen."><span class="l">Träffchans (schablon)</span><span class="v">${m.prob} %</span></div>`})()}
       ${ring(m.score)}
     </div>
   </div>
@@ -1087,7 +1104,9 @@ function renderDetail(m){
         <div class="rr-marks"><span style="left:0;transform:none">SL</span><span style="left:${rW}%">Entry</span><span style="left:${mk(lv.tp1)}%">TP1</span><span style="left:${mk(lv.tp2)}%">TP2</span><span style="left:100%;transform:translateX(-100%)">TP3</span></div>
       </div>
       <div class="stats">
-        <div class="stat"><div class="l">Förväntat värde</div><div class="v ${m.ev>=0?'pos':'neg'}">${sgn(m.ev)}R</div></div>
+        ${(()=>{const c=calibFor(m.hz,m);return c
+          ?`<div class="stat" title="Genomsnittligt utfall per affär för signaler med samma poäng historiskt, efter ${f2(c.cost)} % kostnad (${nf0.format(c.n)} affärer; före kostnad ${sgn(c.avgRgross,f2)}R)."><div class="l">Snitt förr, efter kostnad</div><div class="v ${c.avgR>=0?'pos':'neg'}">${sgn(c.avgR,f2)}R</div></div>`
+          :`<div class="stat"><div class="l">Förväntat värde (schablon)</div><div class="v ${m.ev>=0?'pos':'neg'}">${sgn(m.ev)}R</div></div>`})()}
         <div class="stat"><div class="l">Risk per aktie</div><div class="v">${fp(m.risk)}</div></div>
         <div class="stat"><div class="l">${intra?'Tidsstopp':'Förslag exit'}</div><div class="v" style="font-size:12.5px;font-family:var(--body)">${intra?`Stäng ${hm(ex)}`:'⅓ vid varje TP'}</div></div>
       </div>
@@ -1463,7 +1482,7 @@ async function fetchParts(base,auth){
   let dekRaw=null;
   if(auth){dekRaw=await unwrapDek(auth,session);if(!dekRaw)return 'locked'}
   const manifest=await getJSON(base+'manifest.json');
-  const parts=await Promise.all(['intra','hour','daily','log','lab','archive'].map(async p=>{
+  const parts=await Promise.all(['intra','hour','daily','log','lab','archive','calib'].map(async p=>{
     const hit=partCache[p];if(manifest&&hit&&manifest[p]&&hit.gen===manifest[p])return hit.data;
     let d=null;
     if(auth){const bx=await getJSON(base+p+'.enc.json');if(bx){try{d=JSON.parse(new TextDecoder().decode(await unpack(bx,await openBox(dekRaw,bx))))}catch(e){}}}
@@ -1475,6 +1494,7 @@ async function fetchParts(base,auth){
   const lg=parts[3];if(merged&&lg){merged.log=lg;merged.parts.log=lg.generated}
   const lb=parts[4];if(merged&&lb){merged.lab=lb;merged.parts.lab=lb.generated}
   const ar=parts[5];if(merged&&ar){merged.archive=ar;merged.parts.archive=ar.generated}
+  const cb=parts[6];if(merged&&cb){merged.calib=cb;merged.parts.calib=cb.generated}
   return merged;
 }
 async function loadData(){
