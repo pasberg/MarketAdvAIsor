@@ -8,6 +8,7 @@ parts="${1:-intra,hour,daily}"
 # config/universe.csv, is fetched as well
 missing="$(python pipeline/fetch_market_data.py --out-dir data --missing-parts)"
 [ -n "$missing" ] && parts="$parts,$missing"
+parts="$(echo "$parts" | tr ',' '\n' | awk 'NF && !seen[$0]++' | paste -sd, -)"
 python pipeline/fetch_market_data.py --out-dir data --parts "$parts"
 
 # log today's recommendations and follow up earlier ones (history survives a lost cache)

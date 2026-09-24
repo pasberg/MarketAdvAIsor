@@ -75,9 +75,12 @@ INTRA_HIST = ("5m", "5d", 600)  # last five sessions in 5-minute bars, for the i
 INTRA = {True: ("1m", "5d"), False: ("5m", "5d")}  # US 1-minute, Nordic 5-minute
 
 
-def _r(x: float) -> float | None:
+def _r(x: float, fine: bool = False) -> float | None:
+    """Round a price: 4 decimals below 10, else 2. fine (currencies): 4 decimals below 50, else 3."""
     if x is None or (isinstance(x, float) and math.isnan(x)):
         return None
+    if fine:
+        return round(float(x), 4 if abs(x) < 50 else 3)
     return round(float(x), 4 if abs(x) < 10 else 2)
 
 
@@ -91,7 +94,7 @@ def _local_epoch(ts, daily: bool) -> int:
 
 
 def frame_to_series(df, interval: str, max_bars: int, last_session_only: bool = False,
-                    session: tuple[int, int] | None = None) -> dict | None:
+                    session: tuple[int, int] | None = None, fine: bool = False) -> dict | None:
     """Convert one ticker's OHLCV DataFrame to the compact column format.
 
     session: keep only bars starting within [from, to) Stockholm minutes (intraday series only)."""
@@ -115,10 +118,10 @@ def frame_to_series(df, interval: str, max_bars: int, last_session_only: bool = 
     return {
         "interval": interval,
         "t": [_local_epoch(ts, daily) for ts in df.index],
-        "o": [_r(v) for v in df["Open"]],
-        "h": [_r(v) for v in df["High"]],
-        "l": [_r(v) for v in df["Low"]],
-        "c": [_r(v) for v in df["Close"]],
+        "o": [_r(v, fine) for v in df["Open"]],
+        "h": [_r(v, fine) for v in df["High"]],
+        "l": [_r(v, fine) for v in df["Low"]],
+        "c": [_r(v, fine) for v in df["Close"]],
         "v": [int(v) if v == v else 0 for v in df.get("Volume", [0] * len(df))],
     }
 
@@ -170,7 +173,8 @@ def _put(part: dict, key: str, frames: dict, interval: str, max_bars: int, last_
             continue
         session = SESSION.get(UNIVERSE[sym]["kind"]) if key in ("intra", "intra5") else None
         try:
-            s = frame_to_series(frames[ysym], interval, max_bars, last_session, session)
+            s = frame_to_series(frames[ysym], interval, max_bars, last_session, session,
+                                fine=UNIVERSE[sym]["kind"] == "fx")
             if s:
                 part["symbols"][sym]["series"][key] = s
             else:
@@ -188,7 +192,7 @@ def build_intra(yf) -> dict:
     quotes = _download(yf, [y for y, _, _ in SYMBOLS.values()], "1d", "5d")
     for sym, (ysym, _, _) in SYMBOLS.items():
         info = part["symbols"][sym]
-        q = frame_to_series(quotes.get(ysym), "1d", 5)
+        q = frame_to_series(quotes.get(ysym), "1d", 5, fine=UNIVERSE[sym]["kind"] == "fx")
         if q and len(q["c"]) >= 2:
             info["prevClose"], info["last"] = q["c"][-2], q["c"][-1]
         intra = info["series"].get("intra")

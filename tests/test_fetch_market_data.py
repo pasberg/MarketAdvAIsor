@@ -42,6 +42,13 @@ class FrameToSeries(unittest.TestCase):
         daily = frame_to_series(ohlcv(pd.date_range("2026-09-21", periods=3, freq="1D", tz="UTC")), "1d", 10, session=SESSION["fx"])
         self.assertEqual(len(daily["t"]), 3)  # daily bars are never trimmed
 
+    def test_currencies_keep_pips(self):
+        idx = pd.date_range("2026-09-23", periods=2, freq="1D", tz="UTC")
+        df = pd.DataFrame({"Open": [11.26341, 158.1634], "High": [11.3, 158.2], "Low": [11.2, 158.1],
+                           "Close": [11.26341, 158.1634], "Volume": [0, 0]}, index=idx)
+        self.assertEqual(frame_to_series(df, "1d", 10, fine=True)["c"], [11.2634, 158.163])
+        self.assertEqual(frame_to_series(df, "1d", 10)["c"], [11.26, 158.16])
+
     def test_empty_frame(self):
         self.assertIsNone(frame_to_series(pd.DataFrame(), "1d", 10))
 
