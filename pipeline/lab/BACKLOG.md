@@ -49,3 +49,4 @@ Ordningen är satt av ägaren (2026-09-23) efter genomgången av labbets första
       två åren, omvald lika ofta som mästaren (`walk_forward_combo`), jämförs mot mästaren och köp och behåll.
 - [x] Volatilitetsstyrd exponering — Faber, Donchian, ATR-stop och tidsseriemomentum där hela portföljen
       skalas mot 15 % årlig volatilitet (max 1,5 gånger, lånekostnad `LEVERAGE_COST_PCT_YEAR`).
+- [x] Dubbelt momentum (Antonacci) — rotation mellan OMXS30, S&P 500, Nasdaq 100 och guld, 6 och 12 månader.

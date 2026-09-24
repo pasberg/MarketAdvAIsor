@@ -64,6 +64,30 @@ class Lab(unittest.TestCase):
         pos = lab.hold_ls(b([1, 0, 0, 0, 0, 0]), b([0, 0, 1, 0, 0, 0]), b([0, 0, 0, 1, 0, 0]), b([0, 0, 0, 0, 0, 1]))
         self.assertEqual(list(pos), [1, 1, 0, -1, -1, 0])
 
+    def test_dual_momentum_picks_the_best_asset_or_cash(self):
+        n = 300
+        up = lambda k: frame(100 * np.cumprod(np.full(n, 1 + k)))
+        prices = {"OMXS30": up(0.001), "SPX": up(0.002), "NDX100": up(-0.001), "GOLD": up(0.0005), "VOLV-B": up(0.01)}
+        pos = lab.dual_momentum(prices, lookback=126)
+        self.assertNotIn("VOLV-B", pos.columns)  # only the index/gold universe
+        self.assertEqual(pos.iloc[-1].idxmax(), "SPX")
+        self.assertEqual(pos.iloc[-1].sum(), 1.0)
+        # everything falling: absolute momentum keeps the strategy in cash
+        down = {k: up(-0.002) for k in lab.DUAL_MOMENTUM_UNIVERSE}
+        self.assertEqual(lab.dual_momentum(down, lookback=126).iloc[-1].sum(), 0.0)
+
+    def test_dual_momentum_uses_no_future_data(self):
+        # changing prices after a date must not change the positions up to that date
+        rng = np.random.default_rng(3)
+        base = {k: frame(100 * np.cumprod(1 + rng.normal(0.0005, 0.01, 400))) for k in lab.DUAL_MOMENTUM_UNIVERSE}
+        cut = base["SPX"].index[300]
+        changed = {k: v.copy() for k, v in base.items()}
+        for v in changed.values():
+            v.loc[v.index > cut] *= 3.0
+        a = lab.dual_momentum(base, lookback=126).loc[:cut]
+        b = lab.dual_momentum(changed, lookback=126).loc[:cut]
+        pd.testing.assert_frame_equal(a, b)
+
     def test_rotation_holds_the_strongest(self):
         n = 300
         strong = frame(100 * np.cumprod(np.full(n, 1.002)))
