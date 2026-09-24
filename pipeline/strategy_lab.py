@@ -35,6 +35,9 @@ YEAR = 252  # daily bars per year
 WEEKS = 52  # weekly bars per year
 COST_PCT = 0.15  # % of the position, round trip (spread + courtage)
 SHORT_COST_PCT_YEAR = 3.0  # yearly cost of holding a short (bear certificate / mini short financing, borrow fee)
+LEVERAGE_COST_PCT_YEAR = 4.0  # yearly financing cost on exposure above 100 % (mini future / margin)
+VOL_TARGET_PCT, VOL_MAX_LEVERAGE = 15.0, 1.5  # volatility targeting: yearly volatility aimed for, cap on exposure
+COMBO_SIZE = 3  # strategies in the combination
 
 
 # ---------- indicators ----------
@@ -210,6 +213,16 @@ FAMILIES = {
                         term="Medel", short=True, fn=donchian_ls, grid=[{"n": n, "m": m} for n, m in ((20, 10), (55, 20))]),
     "rsi2_ls": dict(name="RSI(2), köp/blanka", desc="Köper översålt i upptrend, blankar överköpt i nedtrend (kort sikt)",
                     term="Kort", short=True, fn=rsi2_ls, grid=[{"threshold": t} for t in (5, 10)]),
+    # volatility targeting on established trend rules (standard settings, one variant each)
+    # volatility targeting of the whole portfolio on established trend rules (standard settings, one variant each)
+    "vt_price_sma": dict(name="Faber, volatilitetsstyrd", desc="Över 200-dagars medelvärde; hela portföljen skalas mot 15 % årlig volatilitet (max 150 %)",
+                         term="Lång", fn=price_sma, grid=[{"n": 200}], vol_target=True),
+    "vt_donchian": dict(name="Donchian, volatilitetsstyrd", desc="Turtle 55/20; hela portföljen skalas mot 15 % årlig volatilitet (max 150 %)",
+                        term="Medel", fn=donchian, grid=[{"n": 55, "m": 20}], vol_target=True),
+    "vt_chandelier": dict(name="ATR-stop, volatilitetsstyrd", desc="Trend med stop 3 ATR under toppen; portföljen skalas mot 15 % årlig volatilitet (max 150 %)",
+                          term="Medel", fn=chandelier, grid=[{"mult": 3.0}], vol_target=True),
+    "vt_tsmom": dict(name="Tidsseriemomentum, volatilitetsstyrd", desc="12-månadersmomentum; portföljen skalas mot 15 % årlig volatilitet (Moskowitz m.fl.)",
+                     term="Medel–lång", fn=tsmom, grid=[{"lookback": 252}], vol_target=True),
     "xs_momentum": dict(name="Relativ styrka (rotation)", desc="Äger varje månad de aktier som gått bäst senaste halvåret/året, om uppgången är positiv",
                         term="Medel–lång", fn=xs_momentum, portfolio=True,
                         grid=[{"lookback": lb, "top": k} for lb in (126, 252) for k in (5, 10)]),
@@ -236,6 +249,9 @@ WEEKLY_FAMILIES = {
                            desc="Äger varje månad de aktier som gått bäst senaste halvåret/året, om uppgången är positiv"),
     "price_sma_ls": _weekly("price_sma_ls", [{"n": 43}], desc="Köpt över 43-veckorsmedelvärdet, blankad under"),
     "tsmom_ls": _weekly("tsmom_ls", [{"lookback": n} for n in (26, 52)], desc="Köpt efter uppgång, blankad efter nedgång (6 eller 12 månader)"),
+    "vt_price_sma": _weekly("vt_price_sma", [{"n": 43}], desc="Över 43-veckorsmedelvärdet; portföljen skalas mot 15 % årlig volatilitet (max 150 %)"),
+    "vt_donchian": _weekly("vt_donchian", [{"n": 20, "m": 10}], desc="Donchian 20/10 veckor; portföljen skalas mot 15 % årlig volatilitet (max 150 %)"),
+    "vt_tsmom": _weekly("vt_tsmom", [{"lookback": 52}], desc="12-månadersmomentum; portföljen skalas mot 15 % årlig volatilitet (Moskowitz m.fl.)"),
 }
 
 
@@ -275,7 +291,8 @@ def strategy_returns(prices: dict[str, pd.DataFrame], fn, params: dict, cost_pct
         turn = pos.diff().abs().fillna(pos.abs())
         held = pos.shift(1).fillna(0.0)
         short_cost = (held < 0) * SHORT_COST_PCT_YEAR / 100 / ppy
-        rets[sym] = held * r - turn.shift(1).fillna(0.0) * cost_pct / 100 / 2 - short_cost
+        lev_cost = (held.abs() - 1).clip(lower=0) * LEVERAGE_COST_PCT_YEAR / 100 / ppy
+        rets[sym] = held * r - turn.shift(1).fillna(0.0) * cost_pct / 100 / 2 - short_cost - lev_cost
         poss[sym] = pos
     return pd.DataFrame(rets), pd.DataFrame(poss)
 
@@ -283,6 +300,23 @@ def strategy_returns(prices: dict[str, pd.DataFrame], fn, params: dict, cost_pct
 def portfolio(rets: pd.DataFrame) -> pd.Series:
     """Equal weight across the instruments that have data that day."""
     return rets.mean(axis=1, skipna=True).fillna(0.0)
+
+
+def portfolio_vol_target(r: pd.Series, pos: pd.DataFrame, ppy: int = YEAR, cost_pct: float = COST_PCT,
+                         target: float = VOL_TARGET_PCT, max_lev: float = VOL_MAX_LEVERAGE) -> tuple[pd.Series, pd.Series]:
+    """Scale a strategy's portfolio so its yearly volatility aims at `target` %, at most `max_lev` times.
+
+    The scale is set from volatility measured up to the previous bar (3 months daily, 6 months weekly)
+    and updated weekly. Invested capital above 100 % pays LEVERAGE_COST_PCT_YEAR; changing the scale
+    pays the normal trading cost on the change. Returns (scaled returns, scale)."""
+    window, every = (63, 5) if ppy == YEAR else (26, 1)
+    vol = r.rolling(window, min_periods=window).std() * math.sqrt(ppy)
+    scale = (target / 100 / vol).clip(upper=max_lev).shift(1)
+    scale = scale.where(np.arange(len(scale)) % every == 0).ffill().fillna(1.0)
+    invested = pos.abs().reindex(r.index).mean(axis=1).fillna(0.0).shift(1).fillna(0.0)
+    lev_cost = (scale * invested - 1).clip(lower=0) * LEVERAGE_COST_PCT_YEAR / 100 / ppy
+    rescale_cost = scale.diff().abs().fillna(0.0) * invested * cost_pct / 100 / 2
+    return r * scale - lev_cost - rescale_cost, scale
 
 
 def metrics(r: pd.Series, pos: pd.DataFrame | None = None, ppy: int = YEAR) -> dict:
@@ -303,32 +337,74 @@ def metrics(r: pd.Series, pos: pd.DataFrame | None = None, ppy: int = YEAR) -> d
     return {k: round(float(v), 3) for k, v in out.items()}
 
 
+def trailing_score(r: pd.Series, past: slice, ppy: int) -> float:
+    """Sharpe-like score over the last two years before a re-selection."""
+    x = r.loc[past].iloc[-ppy * 2:]
+    return x.mean() / x.std() if x.std() > 0 else -1e9
+
+
 def walk_forward(candidates: list[tuple[str, dict, pd.Series]], index: pd.DatetimeIndex, start: int, step: int, ppy: int = YEAR):
     """Re-pick the candidate with the best Sharpe on data up to each step; trade it on the next step."""
     pieces, picks = [], []
     for a in range(start, len(index), step):
         b = min(a + step, len(index))
         past = slice(index[0], index[a - 1])
-        def score(r):
-            x = r.loc[past].iloc[-ppy * 2:]  # the last two years before the step
-            return x.mean() / x.std() if x.std() > 0 else -1e9
+        score = lambda r: trailing_score(r, past, ppy)
         key, params, r = max(candidates, key=lambda c: score(c[2]))
         pieces.append(r.iloc[a:b])
         picks.append({"from": str(index[a].date()), "family": key, "params": params})
     return (pd.concat(pieces) if pieces else pd.Series(dtype=float)), picks
 
 
+def walk_forward_combo(per_family: dict, index: pd.DatetimeIndex, start: int, step: int, ppy: int = YEAR, k: int = COMBO_SIZE):
+    """Like walk_forward, but hold an equal-weight mix of the k families that scored best (each with its best
+    parameters) instead of a single one. Spreading over several strategies is meant to avoid chasing one."""
+    pieces, picks = [], []
+    for a in range(start, len(index), step):
+        b = min(a + step, len(index))
+        past = slice(index[0], index[a - 1])
+        best = []
+        for key, runs in per_family.items():
+            params, r, _ = max(runs, key=lambda x: trailing_score(x[1], past, ppy))
+            best.append((trailing_score(r, past, ppy), key, params, r))
+        top = sorted(best, key=lambda x: -x[0])[:k]
+        pieces.append(pd.concat([x[3].iloc[a:b] for x in top], axis=1).mean(axis=1))
+        picks.append({"from": str(index[a].date()), "members": [{"family": x[1], "params": x[2]} for x in top]})
+    return (pd.concat(pieces) if pieces else pd.Series(dtype=float)), picks
+
+
+def current_positions(fam: dict, params: dict, prices: dict[str, pd.DataFrame], scale: float = 1.0) -> dict[str, tuple[float, str]]:
+    """Position per instrument at the last bar (times the portfolio scale for volatility-targeted
+    strategies), and the date the position was taken."""
+    out = {}
+    rot = fam["fn"](prices, **params) if fam.get("portfolio") else None
+    for sym, df in prices.items():
+        if rot is not None:
+            if sym not in rot.columns:
+                continue
+            pos = (rot[sym] > 0).astype(float).reindex(df.index).ffill().fillna(0)
+        else:
+            pos = fam["fn"](df, **params).reindex(df.index).fillna(0)
+        sign = np.sign(pos)
+        changes = sign.ne(sign.shift())
+        out[sym] = (float(pos.iloc[-1]) * scale, str(changes[changes].index[-1].date()))
+    return out
+
+
 def run(prices: dict[str, pd.DataFrame], cost_pct: float = COST_PCT, families: dict | None = None, ppy: int = YEAR) -> dict:
     """Test all families on one price series set. Daily bars by default; weekly with WEEKLY_FAMILIES and ppy=WEEKS."""
     families = families or FAMILIES
     M = lambda r, pos=None: metrics(r, pos, ppy)
-    per_family, all_cands = {}, []
+    per_family, all_cands, scale_now = {}, [], {}
     index = None
     for key, fam in families.items():
         runs = []
         for params in fam["grid"]:
             rets, pos = strategy_returns(prices, fam["fn"], params, cost_pct, fam.get("portfolio", False), ppy)
             r = portfolio(rets)
+            if fam.get("vol_target"):
+                r, scale = portfolio_vol_target(r, pos, ppy, cost_pct)
+                scale_now[(key, json.dumps(params, sort_keys=True))] = float(scale.iloc[-1])
             index = r.index if index is None else index
             runs.append((params, r, pos))
         per_family[key] = runs
@@ -363,17 +439,25 @@ def run(prices: dict[str, pd.DataFrame], cost_pct: float = COST_PCT, families: d
     champ_r, champ_picks = walk_forward(all_cands, index, start, step, ppy)
     last = champ_picks[-1] if champ_picks else {"family": "buy_hold", "params": {}}
     fam = families[last["family"]]
-    signals = []
-    rot = fam["fn"](prices, **last["params"]) if fam.get("portfolio") else None
-    for sym, df in prices.items():
-        if rot is not None:
-            if sym not in rot.columns:
-                continue
-            pos = (rot[sym] > 0).astype(int).reindex(df.index).ffill().fillna(0)
-        else:
-            pos = fam["fn"](df, **last["params"]).reindex(df.index).fillna(0).astype(int)
-        changes = pos.ne(pos.shift())
-        signals.append({"sym": sym, "pos": int(pos.iloc[-1]), "since": str(changes[changes].index[-1].date())})
+    signals = [{"sym": sym, "pos": int(np.sign(p)), "weight": round(p, 2), "since": since}
+               for sym, (p, since) in current_positions(fam, last["params"], prices,
+                                                        scale_now.get((last["family"], json.dumps(last["params"], sort_keys=True)), 1.0)).items()]
+
+    # combination: equal-weight mix of the best COMBO_SIZE families
+    combo_r, combo_picks = walk_forward_combo(per_family, index, start, step, ppy)
+    ranked = sorted(per_family.items(), key=lambda kv: -max(M(r.loc[train]).get("sharpe", -9) for _, r, _ in kv[1]))
+    static = []
+    for key, runs in ranked[:COMBO_SIZE]:
+        params, r, _ = max(runs, key=lambda x: M(x[1].loc[train]).get("sharpe", -9))
+        static.append({"family": key, "params": params, "r": r})
+    static_r = pd.concat([m["r"] for m in static], axis=1).mean(axis=1)
+    members_now = combo_picks[-1]["members"] if combo_picks else [{"family": "buy_hold", "params": {}}]
+    weights: dict[str, list] = {}
+    for m in members_now:
+        sc = scale_now.get((m["family"], json.dumps(m["params"], sort_keys=True)), 1.0)
+        for sym, (p, _) in current_positions(families[m["family"]], m["params"], prices, sc).items():
+            weights.setdefault(sym, []).append(p)
+    combo_signals = [{"sym": sym, "weight": round(sum(v) / len(members_now), 2)} for sym, v in weights.items()]
     bh_r = per_family["buy_hold"][0][1]
     monthly = lambda r: [{"t": str(d.date()), "v": round(float(v), 4)} for d, v in (1 + r).cumprod().resample("ME").last().items()]
     return {
@@ -384,7 +468,14 @@ def run(prices: dict[str, pd.DataFrame], cost_pct: float = COST_PCT, families: d
         "benchmark": {"train": bh["best"]["train"], "test": bh["best"]["test"], "wf": M(bh_r.iloc[start:])},
         "champion": {"family": last["family"], "name": fam["name"], "params": last["params"], "wf": M(champ_r),
                      "picks": champ_picks, "signals": sorted(signals, key=lambda s: (-abs(s["pos"]), -s["pos"], s["sym"]))},
-        "curves": {"champion": monthly(champ_r), "benchmark": monthly(bh_r.iloc[start:])},
+        "vol_target": {"target_pct": VOL_TARGET_PCT, "max_leverage": VOL_MAX_LEVERAGE, "leverage_cost_pct_year": LEVERAGE_COST_PCT_YEAR,
+                       "scale_now": {k: round(v, 2) for (k, _), v in scale_now.items()}},
+        "combination": {"size": COMBO_SIZE, "wf": M(combo_r), "picks": combo_picks,
+                        "members_now": [{**m, "name": families[m["family"]]["name"]} for m in members_now],
+                        "train_members": [{"family": m["family"], "params": m["params"], "name": families[m["family"]]["name"]} for m in static],
+                        "test": M(static_r.loc[test]),
+                        "signals": sorted(combo_signals, key=lambda s: (-s["weight"], s["sym"]))},
+        "curves": {"champion": monthly(champ_r), "combination": monthly(combo_r), "benchmark": monthly(bh_r.iloc[start:])},
     }
 
 
@@ -410,11 +501,13 @@ def main() -> int:
     history = [h for h in history if h["date"] != today] + [{
         "date": today, "champion": res["champion"]["family"], "params": res["champion"]["params"],
         "wf_sharpe": res["champion"]["wf"].get("sharpe"), "bh_sharpe": res["benchmark"]["wf"].get("sharpe"),
+        "combo_sharpe": res["combination"]["wf"].get("sharpe"),
         **({"week_champion": res["weekly"]["champion"]["family"], "week_wf_sharpe": res["weekly"]["champion"]["wf"].get("sharpe"),
             "week_bh_sharpe": res["weekly"]["benchmark"]["wf"].get("sharpe")} if "weekly" in res else {})}]
     out.write_text(json.dumps({"part": "lab", "generated": now, **res, "history": history[-400:]}), encoding="utf-8")
     c = res["champion"]
-    print(f"Strategilabb: {res['configs_tested']} varianter på {res['universe']} instrument; mästare: {c['name']} {c['params']}")
+    print(f"Strategilabb: {res['configs_tested']} varianter på {res['universe']} instrument; mästare: {c['name']} {c['params']}; "
+          f"kombination: {', '.join(m['name'] for m in res['combination']['members_now'])}")
     if "weekly" in res:
         w = res["weekly"]
         print(f"Veckodata: {w['configs_tested']} varianter, {w['period']['start']} – {w['period']['end']}; mästare: {w['champion']['name']} {w['champion']['params']}")
