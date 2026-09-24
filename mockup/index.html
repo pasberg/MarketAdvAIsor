@@ -1746,7 +1746,14 @@ function roundTrips(fills){
 // ---- trades with computed result and R
 function jrTrades(){
   const d=JR.data,avz=roundTrips(d.fills).map(t=>{const n=d.notes[t.id]||{};const o=Object.assign({},t);
-    for(const k of ['setup','source','hz','dir','stop','target','notes','product','und','sigTime','sigPrice','open','close'])if(n[k]!=null&&n[k]!=='')o[k]=n[k];return o});
+    for(const k of ['setup','source','hz','dir','stop','target','notes','product','und','sigTime','sigPrice'])if(n[k]!=null&&n[k]!=='')o[k]=n[k];
+    // a time of day entered for the export's dates (the export has dates only)
+    const sameDay=(x,d)=>x&&d&&String(x).slice(0,10)===d;
+    if(sameDay(n.open,t.open))o.open=n.open;
+    if(t.close){if(sameDay(n.close,t.close))o.close=n.close}
+    // still open in the export: a sale entered by hand counts until an import brings Avanza's own figures
+    else{o.close=n.close||null;if(n.exit)o.exit=n.exit;if(n.pnlSEK)o.pnlSEK=n.pnlSEK;o.prelim=!!(o.close&&(n.exit||n.pnlSEK))}
+    return o});
   const man=d.trades.filter(t=>!t.del).map(t=>Object.assign({src:'manual'},t));
   return avz.concat(man).map(t=>{
     const posL=t.src==='avanza'?t.pos==='L':!(t.dir==='S'&&(t.product==='aktie'||t.product==='annat'));
@@ -1856,7 +1863,7 @@ async function renderJournal(){
     <div class="bt-card" style="margin-top:20px"><h3 class="sec-t" style="padding:14px 16px 0"><span>Affärer</span><span>${ts.length} st · klicka Ändra för setup, stop loss och källa</span></h3>
       <div class="bt-scroll"><table class="bt-tbl jr-tbl"><thead><tr><th>Öppnad</th><th>Stängd</th><th>Instrument</th><th>Syn</th><th>Setup</th><th>Källa</th><th>Entry</th><th>Exit</th><th>Stop</th><th>R</th><th>Resultat</th><th></th></tr></thead><tbody>
       ${ts.map(t=>`<tr><td>${esc(String(t.open||'').replace('T',' '))}</td><td>${t.close?esc(String(t.close).replace('T',' ')):'<span class="jr-small">öppen</span>'}</td>
-        <td class="l">${esc(t.name)}${t.src==='avanza'?' <span class="jr-small">Avanza</span>':''}</td><td><span class="dir ${t.dir==='S'?'S':'L'}">${t.dir==='S'?'KORT':'LÅNG'}</span></td>
+        <td class="l">${esc(t.name)}${t.src==='avanza'?` <span class="jr-small">Avanza${t.prelim?' · exit preliminär':''}</span>`:''}</td><td><span class="dir ${t.dir==='S'?'S':'L'}">${t.dir==='S'?'KORT':'LÅNG'}</span></td>
         <td class="l">${esc(t.setup||'')}</td><td class="l">${esc(t.source||'')}</td><td>${t.entry==null?'–':fp(t.entry)}</td><td>${t.exit==null?'–':fp(t.exit)}</td><td>${t.stop==null?'–':fp(t.stop)}</td>
         <td>${t.r==null?'–':sgn(t.r,f2)}</td><td class="${(t.pnl||0)>=0?'pos':'neg'}">${kr(t.pnl)}</td><td><button data-jr-edit="${esc(t.id)}">Ändra</button></td></tr>`).join('')}
       </tbody></table></div></div>`
@@ -1899,9 +1906,10 @@ function jrOpenForm(id){
   const now=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);
   const v=t||{dir:'L',product:'aktie',hz:state.hz,open:now,cur:'SEK'};
   for(const el of f.elements){if(!el.name)continue;const x=v[el.name];el.value=x==null?'':el.type==='datetime-local'&&/^\d{4}-\d\d-\d\d$/.test(x)?x+'T00:00':x;
-    el.disabled=avz&&['name','qty','entry','exit','fees','pnlSEK','cur'].includes(el.name)}
+    el.disabled=avz&&(['name','qty','entry','fees','cur'].includes(el.name)||(!t.prelim&&!!t.close&&['exit','pnlSEK'].includes(el.name)))}
+  if(avz&&!t.prelim&&t.close==null)f.elements.close.value='';
   document.getElementById('jr-dlg-t').textContent=t?'Ändra affär':'Ny affär';
-  document.getElementById('jr-dlg-hint').textContent=avz?'Importerad från Avanza: priser och resultat kommer från exporten. Lägg till setup, källa, horisont och planerad stop loss. Exporten saknar klockslag — ange tiden för din entry under Öppnad om du vet den.':'Priser anges för det du handlade (för ett certifikat: certifikatets kurs). Lämna Stängd och Exit tomma för en öppen affär.';
+  document.getElementById('jr-dlg-hint').textContent=avz&&(!t.close||t.prelim)?'Importerad från Avanza och öppen i exporten. Har du sålt: fyll i Stängd och Exit (eller resultatet i kronor). Det räknas som preliminärt tills nästa import ersätter det med Avanzas siffror.':avz?'Importerad från Avanza: priser och resultat kommer från exporten. Lägg till setup, källa, horisont och planerad stop loss. Exporten saknar klockslag — ange tiden för din entry under Öppnad om du vet den.':'Priser anges för det du handlade (för ett certifikat: certifikatets kurs). Lämna Stängd och Exit tomma för en öppen affär.';
   document.getElementById('jr-del').hidden=!t;
   document.getElementById('jr-dlg').showModal();
 }
@@ -1912,6 +1920,8 @@ document.getElementById('jr-form').addEventListener('submit',async e=>{
     const withTime=v=>v&&!/T00:00$/.test(v)?v:'';
     JR.data.notes[jrEditing.id]={setup:o.setup,source:o.source,hz:o.hz,dir:o.dir,product:o.product,stop:o.stop,target:o.target,notes:o.notes,
       und:o.und.toUpperCase(),sigTime:o.sigTime,sigPrice:o.sigPrice,open:withTime(o.open),close:withTime(o.close),mod:Date.now()};
+    // an open position: the sale entered here (kept as entered, also without a time of day)
+    if(o.exit!==undefined||o.pnlSEK!==undefined)Object.assign(JR.data.notes[jrEditing.id],{close:o.close,exit:o.exit,pnlSEK:o.pnlSEK});
   }else{
     const id=jrEditing?jrEditing.id:'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
     const sym=T[o.name.toUpperCase()]?o.name.toUpperCase():null;
