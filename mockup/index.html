@@ -1846,6 +1846,8 @@ async function renderJournal(){
       ${jrGroup('Per källa',ts,t=>t.source||'(ingen källa angiven)')}
       ${jrGroup('Per horisont',ts,t=>HZ_NAME[t.hz]||'(ej angiven)')}
       ${jrGroup('Per riktning och produkt',ts,t=>(t.dir==='S'?'Kort':'Lång')+' · '+(PRODUCT_NAME[t.product]||t.product))}
+      ${jrGroup('Per innehavstid',ts,t=>{const d=Math.round((Date.parse(String(t.close).slice(0,10))-Date.parse(String(t.open).slice(0,10)))/864e5);return isNaN(d)?null:d===0?'Samma dag':d<=5?'1–5 dagar':d<=20?'6–20 dagar':'Mer än 20 dagar'})}
+      ${jrGroup('Per avslut',ts,t=>t.redeemed?'Inlöst / knock-out':'Stängd själv')}
       ${jrGroup('Per veckodag',ts,dow)}
       ${jrGroup('Per öppningstimme',ts.filter(hourOf),hourOf)}
     </div>
