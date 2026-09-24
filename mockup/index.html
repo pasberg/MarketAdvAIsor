@@ -1173,24 +1173,30 @@ function renderLog(out,hz){
 }
 
 // ---------- strategy lab (results computed by pipeline/strategy_lab.py)
-let labChart=null;
+let labChart=null,labBars='day';
 function renderLab(){
   const out=document.getElementById('lab-out');
   if(labChart){labChart.remove();labChart=null}
-  const L=REAL&&REAL.lab;
+  const root=REAL&&REAL.lab,weekly=root&&root.weekly;
+  if(labBars==='week'&&!weekly)labBars='day';
+  const L=root&&(labBars==='week'?Object.assign({},weekly,{history:root.history}):root);
   if(!L){out.innerHTML='<div class="bt-empty">Strategilabbet har inte körts än, eller så är du inte inloggad. Det körs när dagsdatan uppdateras (17:50 och 22:35) och när sidan publiceras om.</div>';return}
   const pct=v=>v==null?'–':sgn(v)+' %',sh=v=>v==null?'–':f2(v),C=L.champion,B=L.benchmark;
   const fmtP=p=>Object.entries(p||{}).map(([k,v])=>`${k} ${v===true?'ja':v===false?'nej':v}`).join(', ')||'–';
   const nameOf=id=>(L.families.find(f=>f.id===id)||{name:id}).name;
   const cls=v=>(v||0)>=0?'pos':'neg';
-  const inPos=C.signals.filter(x=>x.pos>0),shorts=C.signals.filter(x=>x.pos<0);
-  out.innerHTML=`
+  const inPos=C.signals.filter(x=>x.pos>0),shorts=C.signals.filter(x=>x.pos<0),K=L.combination,V=L.vol_target;
+  const wTxt=w=>w==null?'':' '+Math.round(w*100)+' %';
+  const tabs=weekly?`<div class="bt-tabs" role="tablist" aria-label="Data" style="margin-bottom:10px">
+      <button role="tab" data-labbars="day" aria-selected="${labBars==='day'}">Dagsdata · ${root.period.start.slice(0,4)}–${root.period.end.slice(0,4)}</button>
+      <button role="tab" data-labbars="week" aria-selected="${labBars==='week'}">Veckodata · ${weekly.period.start.slice(0,4)}–${weekly.period.end.slice(0,4)}</button></div>`:'';
+  out.innerHTML=`${tabs}
     <div class="kpis">
       ${kp('Testade varianter',L.configs_tested,`${L.families.length} strategier × parametrar`)}
       ${kp('Instrument',L.universe,`kostnad ${f2(L.cost_pct)} % per affär`)}
       ${kp('Period',L.period.start.slice(0,4)+'–'+L.period.end.slice(0,4),`omval från ${L.period.wf_start}`)}
-      ${kp('Mästarens avkastning',pct(C.wf.cagr),'per år, omval som bara ser bakåt',cls(C.wf.cagr))}
-      ${kp('Köp och behåll',pct(B.wf.cagr),'per år, samma period',cls(B.wf.cagr))}
+      ${kp('Mästarens avkastning',pct(C.wf.cagr),`per år · största fall ${pct(C.wf.mdd)}`,cls(C.wf.cagr))}
+      ${kp('Köp och behåll',pct(B.wf.cagr),`per år · största fall ${pct(B.wf.mdd)}`,cls(B.wf.cagr))}
       ${kp('Sharpe, mästare / köp',sh(C.wf.sharpe)+' / '+sh(B.wf.sharpe),'avkastning per risk',(C.wf.sharpe||0)>=(B.wf.sharpe||0)?'pos':'neg')}
     </div>
     <div class="lab-champ" style="margin-top:20px">
@@ -1198,7 +1204,7 @@ function renderLab(){
         <p class="bt-note" style="padding:0 16px;margin-top:4px">Var ${L.period.wf_start?'6:e månad':'period'} väljs den strategi och de inställningar som gått bäst de senaste två åren, och används sedan framåt. Kurvan visar det omvalet som om det gjorts i realtid — jämfört med att köpa och behålla samma instrument.</p>
         <div class="eq" id="lab-eq"></div>
         <h3 class="sec-t" style="padding:0 16px"><span>Mästarens signal i dag</span><span>${inPos.length} köpta${shorts.length?` · ${shorts.length} blankade`:''} av ${C.signals.length}</span></h3>
-        <div class="sig-list">${C.signals.map(x=>`<span class="${x.pos>0?'in':x.pos<0?'short':'out'}" title="${x.pos>0?'Köpt':x.pos<0?'Blankad':'Utanför'} sedan ${x.since}">${esc(x.sym)}${x.pos<0?' ↓':''}</span>`).join('')}</div>
+        <div class="sig-list">${C.signals.map(x=>`<span class="${x.pos>0?'in':x.pos<0?'short':'out'}" title="${x.pos>0?'Köpt':x.pos<0?'Blankad':'Utanför'} sedan ${x.since}">${esc(x.sym)}${x.pos<0?' ↓':''}${x.pos&&x.weight!=null&&Math.abs(x.weight)!==1?wTxt(Math.abs(x.weight)):''}</span>`).join('')}</div>
       </div>
       <div class="bt-card"><h3 class="sec-t"><span>Omval över tid</span><span>vilken strategi som valdes</span></h3>
         <div class="bt-scroll"><table class="bt-tbl"><thead><tr><th>Från</th><th>Strategi</th><th>Inställningar</th></tr></thead><tbody>
@@ -1207,11 +1213,15 @@ function renderLab(){
         ${L.history&&L.history.length>1?`<h3 class="sec-t" style="padding:14px 16px 0"><span>Labbets historik</span><span>en rad per körningsdag</span></h3><div class="bt-scroll"><table class="bt-tbl"><thead><tr><th>Datum</th><th>Mästare</th><th>Sharpe</th><th>Köp &amp; behåll</th></tr></thead><tbody>${L.history.slice(-10).reverse().map(h=>`<tr><td>${h.date}</td><td style="text-align:left;font-family:var(--body)">${esc(nameOf(h.champion))}</td><td>${sh(h.wf_sharpe)}</td><td>${sh(h.bh_sharpe)}</td></tr>`).join('')}</tbody></table></div>`:''}
       </div>
     </div>
+    ${K?`<div class="bt-card" style="margin-top:20px"><h3 class="sec-t"><span>Kombination: de ${K.size} bästa strategierna i lika delar</span><span>omval ${pct(K.wf.cagr)}/år · Sharpe ${sh(K.wf.sharpe)} · största fall ${pct(K.wf.mdd)}</span></h3>
+      <p class="bt-note" style="padding:0 16px;margin-top:4px">I stället för en enda mästare delas kapitalet lika mellan de ${K.size} strategier som haft bäst Sharpe de senaste två åren, och urvalet görs om lika ofta som mästarens. Kombinationen byter mindre abrupt än mästaren. I kontrollperioden gav den kombination som valdes på träningsdatan (${K.train_members.map(m=>esc(m.name)).join(', ')}) ${pct(K.test.cagr)} per år, Sharpe ${sh(K.test.sharpe)} och största fall ${pct(K.test.mdd)}. Köp och behåll gav ${pct((L.families.find(f=>f.id==='buy_hold')||{best:{test:{}}}).best.test.cagr)}.</p>
+      <h3 class="sec-t" style="padding:0 16px"><span>Ingår nu: ${K.members_now.map(m=>esc(m.name)+(Object.keys(m.params||{}).length?' ('+esc(fmtP(m.params))+')':'')).join(' · ')}</span><span>andel av en full position per instrument</span></h3>
+      <div class="sig-list">${K.signals.map(x=>`<span class="${x.weight>0?'in':x.weight<0?'short':'out'}">${esc(x.sym)}${x.weight?wTxt(x.weight):''}</span>`).join('')}</div></div>`:''}
     <div class="bt-card" style="margin-top:20px"><h3 class="sec-t"><span>Alla strategier</span><span>tränad ${L.period.start} – ${L.period.split} · kontroll ${L.period.split} – ${L.period.end}</span></h3>
       <div class="bt-scroll"><table class="bt-tbl lab-tbl"><thead><tr><th>Strategi</th><th>Idé</th><th>Horisont</th><th>Bästa inställning (tränad)</th><th>Kontroll: avk./år</th><th>Kontroll: Sharpe</th><th>Kontroll: största fall</th><th>I marknaden</th><th>Omval: avk./år</th><th>Omval: Sharpe</th><th>Robust</th></tr></thead><tbody>
       ${L.families.map(f=>{const t=f.best.test||{};return `<tr><td style="text-align:left;font-family:var(--body)"><b>${esc(f.name)}</b></td><td>${esc(f.desc)}</td><td style="font-family:var(--body)">${esc(f.term)}</td><td>${esc(fmtP(f.best.params))}</td><td class="${cls(t.cagr)}">${pct(t.cagr)}</td><td>${sh(t.sharpe)}</td><td class="neg">${pct(t.mdd)}</td><td>${t.exposure==null?'–':Math.round(t.exposure)+' %'+(t.short?` <span style="color:var(--down)">(${Math.round(t.short)} % kort)</span>`:'')}</td><td class="${cls(f.wf.cagr)}">${pct(f.wf.cagr)}</td><td>${sh(f.wf.sharpe)}</td><td>${f.id==='buy_hold'?'<span class="no-flag">Jämförelse</span>':f.robust.ok?'<span class="ok-flag">Robust</span>':`<span class="no-flag">${Math.round(f.robust.share_positive*100)} % positiva</span>`}</td></tr>`}).join('')}
       </tbody></table></div></div>
-    <p class="bt-note">Så läser du tabellen: <b>Kontroll</b> är den sista 40 % av perioden, som inte användes när inställningen valdes. <b>Omval</b> är resultatet när strategins inställning väljs om regelbundet med bara historisk data — det närmaste ett ärligt framtidstest man kan göra i efterhand. <b>Robust</b> kräver att strategin slog köp och behåll i kontrollperioden (Sharpe) och att minst 60 % av dess inställningar var lönsamma där. Strategier märkta ”köp/blanka” kan även blanka (t.ex. via bear-certifikat eller mini short) och betalar då ${f1(L.short_cost_pct_year||3)} % per år för den korta positionen; övriga äger eller står utanför. Alla handlar dagen efter signalen och betalar ${f2(L.cost_pct)} % per affär. Ju fler varianter som testas, desto större risk att någon ser bra ut av slump — därför väljs mästaren bara med omval, aldrig på hela perioden. Historisk avkastning är ingen garanti för framtiden.</p>`;
+    <p class="bt-note">${labBars==='week'?'<b>Veckodata</b> täcker tio år inklusive nedgångarna 2018, 2020 och 2022, men bara de långsiktiga strategierna (inställningar i veckor). ':''}Så läser du tabellen: <b>Kontroll</b> är den sista 40 % av perioden, som inte användes när inställningen valdes. <b>Omval</b> är resultatet när strategins inställning väljs om regelbundet med bara historisk data — det närmaste ett ärligt framtidstest man kan göra i efterhand. <b>Robust</b> kräver att strategin slog köp och behåll i kontrollperioden (Sharpe) och att minst 60 % av dess inställningar var lönsamma där. ${V?`Strategier märkta <b>volatilitetsstyrd</b> skalar hela portföljen så att den årliga svängningen siktar på ${f1(V.target_pct)} % — mer investerat i lugna perioder (högst ${Math.round(V.max_leverage*100)} %, lån kostar ${f1(V.leverage_cost_pct_year)} % per år) och mindre i oroliga. ”I marknaden” visar tiden med position, inte hävstången. `:''}Strategier märkta ”köp/blanka” kan även blanka (t.ex. via bear-certifikat eller mini short) och betalar då ${f1(L.short_cost_pct_year||3)} % per år för den korta positionen; övriga äger eller står utanför. Alla handlar dagen efter signalen och betalar ${f2(L.cost_pct)} % per affär. Ju fler varianter som testas, desto större risk att någon ser bra ut av slump — därför väljs mästaren bara med omval, aldrig på hela perioden. Historisk avkastning är ingen garanti för framtiden.</p>`;
   const el=document.getElementById('lab-eq'),LW=window.LightweightCharts;
   if(el&&LW&&L.curves){
     const Cv=n=>cssVar('--'+n);
@@ -1220,6 +1230,7 @@ function renderLab(){
       localization:{locale:'sv-SE',priceFormatter:v=>sgn((v-1)*100)+' %'}});
     const toSer=a=>a.map(p=>({time:p.t,value:p.v}));
     labChart.addSeries(LW.LineSeries,{color:Cv('accent'),lineWidth:2,priceLineVisible:false,title:'Mästare'}).setData(toSer(L.curves.champion));
+    if(L.curves.combination)labChart.addSeries(LW.LineSeries,{color:Cv('up'),lineWidth:2,priceLineVisible:false,title:'Kombination'}).setData(toSer(L.curves.combination));
     labChart.addSeries(LW.LineSeries,{color:Cv('faint'),lineWidth:2,lineStyle:2,priceLineVisible:false,title:'Köp & behåll'}).setData(toSer(L.curves.benchmark));
     labChart.timeScale().fitContent();
   }
@@ -1252,6 +1263,7 @@ document.querySelectorAll('.nav a[data-view]').forEach(a=>a.addEventListener('cl
 document.getElementById('nav-metod').addEventListener('click',()=>{if(state.view!=='analys'){state.view='analys';render()}});
 ['bt-min','bt-cost'].forEach(id=>document.getElementById(id).addEventListener('change',()=>{if(state.view==='backtest')renderBacktest()}));
 document.getElementById('bt-var').addEventListener('change',e=>{BTUI.variant=e.target.value;renderBacktest()});
+document.getElementById('lab').addEventListener('click',e=>{const b=e.target.closest('[data-labbars]');if(b){labBars=b.dataset.labbars;renderLab()}});
 document.getElementById('bt').addEventListener('click',e=>{
   const tab=e.target.closest('[data-bttab]');if(tab){BTUI.tab=tab.dataset.bttab;renderBacktest();return}
   const row=e.target.closest('tr[data-var]');if(row){BTUI.variant=row.dataset.var;renderBacktest()}

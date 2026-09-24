@@ -24,8 +24,10 @@ och lägg gärna till nya idéer längst ned.
 
 ## Att göra
 
-- [ ] **Volatilitetsstyrd exponering** — överlägg på "Pris över medelvärde": skala positionen så att
-      den årliga volatiliteten blir ca 15 % (maxhävstång 1). Kräver att positioner får vara mellan 0 och 1.
+Ordningen är satt av ägaren (2026-09-23) efter genomgången av labbets första resultat.
+
+- [ ] **Lista utan efterhandsval** — testa på ett urval som inte är valt för att det gått bra, t.ex. alla
+      nuvarande och tidigare bolag i OMXS30. Kräver ny datahämtning och ett eget universum i labbet.
 - [ ] **Marknadsregimfilter** — handla bara aktier när deras index (OMXS30 för Norden, SPX för USA)
       ligger över sitt 200-dagars medelvärde. Kombinera med Donchian och RSI(2).
 - [ ] **Keltner-utbrott** — köp stängning över EMA(20) + 2 × ATR(10), sälj under EMA(20).
@@ -33,10 +35,7 @@ och lägg gärna till nya idéer längst ned.
 - [ ] **IBS-rekyl (Internal Bar Strength)** — köp när (stängning − lägsta) / (högsta − lägsta) < 0,2 i upptrend,
       sälj när IBS > 0,8.
 - [ ] **Månadsskiftet (turn of the month)** — äg index de sista 2 och första 3 handelsdagarna i månaden.
-- [ ] **Veckodata** — kör långa strategier (Faber 10 månader, 12-månaders momentum) på veckoserien
-      (10 års historik) i stället för dagsserien. Kräver att `load_prices` kan läsa `week`.
 - [ ] **Ichimoku** — pris över molnet och Tenkan över Kijun (9/26/52).
-- [ ] **Kombination av mästare** — likaviktad portfölj av de tre robustaste strategierna i stället för en.
 
 ## Klart
 
@@ -44,4 +43,10 @@ och lägg gärna till nya idéer längst ned.
       Bollinger, 52-veckorshögsta, ATR-stop, relativ styrka (rotation).
 - [x] Köp/blanka-versioner: pris mot medelvärde, medelvärdeskorsning, tidsseriemomentum,
       Donchian och RSI(2), med årlig kostnad för korta positioner (`SHORT_COST_PCT_YEAR`).
+- [x] Veckodata — labbet körs även på veckoserien (10 års historik) med de långsiktiga strategierna
+      (`WEEKLY_FAMILIES`, inställningar i veckor).
+- [x] Kombination av strategier — likaviktad portfölj av de 3 strategier som haft bäst Sharpe de senaste
+      två åren, omvald lika ofta som mästaren (`walk_forward_combo`), jämförs mot mästaren och köp och behåll.
+- [x] Volatilitetsstyrd exponering — Faber, Donchian, ATR-stop och tidsseriemomentum där hela portföljen
+      skalas mot 15 % årlig volatilitet (max 1,5 gånger, lånekostnad `LEVERAGE_COST_PCT_YEAR`).
 - [x] Dubbelt momentum (Antonacci) — rotation mellan OMXS30, S&P 500, Nasdaq 100 och guld, 6 och 12 månader.
