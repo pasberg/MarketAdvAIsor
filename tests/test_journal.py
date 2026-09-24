@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 from pipeline.encrypt_data import user_id
-from pipeline.journal_export import export
+from pipeline.journal_export import context, export
 
 ROOT = Path(__file__).resolve().parents[1]
 ITER = 1000
@@ -82,6 +82,61 @@ console.log(JSON.stringify({{n:fills.length,sameKeys:fills.map(f=>f.k).join()===
         self.assertEqual((bear["product"], bear["dir"], bear["hz"]), ("certifikat", "S", "intradag"))
         self.assertAlmostEqual(bear["pnlSEK"], 48)
         self.assertIsNone(by["Ericsson B"].get("close"))  # still open
+
+
+class Context(unittest.TestCase):
+    D = 20720 * 86400  # 2026-09-24 00:00 as wall clock
+
+    def bars(self):
+        # previous day closes at 100; today opens at 102 (gap up 2 %) and climbs 0.1 per 5 minutes from 09:00
+        t = [self.D - 86400 + (17 * 60 + 25) * 60] + [self.D + (540 + 5 * i) * 60 for i in range(40)]
+        c = [100.0] + [102 + 0.1 * (i + 1) for i in range(40)]
+        o = [100.0] + [102 + 0.1 * i for i in range(40)]
+        return {"t": t, "o": o, "h": [x + 0.05 for x in c], "l": [x - 0.05 for x in o], "c": c, "v": [1] * len(t)}
+
+    def daily(self, up=True):
+        t = [self.D - (60 - i) * 86400 for i in range(60)]
+        c = [50 + i if up else 150 - i for i in range(59)] + [100.0]
+        return {"t": t, "o": c, "h": c, "l": c, "c": c}
+
+    def test_long_after_the_first_half_hour(self):
+        c = context(self.bars(), self.daily(), "2026-09-24T10:00", "L")
+        f = c["feats"]
+        self.assertEqual(f["gap"], "Med gapet")
+        self.assertEqual(f["mom"], "Med första halvtimmen")
+        self.assertEqual(f["day"], "Med dagens rörelse")
+        self.assertTrue(f["vwap"].startswith("Med VWAP"))
+        self.assertEqual(f["trend"], "Med dagstrenden")
+        self.assertEqual(f["tod"], "1–2 h efter öppning")
+        self.assertAlmostEqual(c["nums"]["gap"], 2.0)
+
+    def test_short_early_and_against_everything(self):
+        f = context(self.bars(), self.daily(), "2026-09-24T09:10", "S")["feats"]
+        self.assertEqual(f["gap"], "Mot gapet (fyllnad)")
+        self.assertEqual(f["mom"], "Under första halvtimmen")
+        self.assertEqual(f["tod"], "0–30 min efter öppning")
+
+    def test_waits_for_data_and_handles_dates(self):
+        self.assertIsNone(context(self.bars(), self.daily(), "2026-09-24T16:00", "L"))  # bars end 12:15
+        d = context(None, self.daily(), "2026-09-23", "L")  # date only, daily data: trend
+        self.assertIn("trend", d["feats"])
+        self.assertNotIn("mom", d["feats"])  # no time of day: no intraday context
+
+    def test_export_keeps_earlier_contexts_and_adds_uid(self):
+        box = {"v": 0, "plain": json.dumps({"trades": [], "fills": [], "notes": {},
+                                            "ctxReq": [{"k": "X|2026-09-24T10:00|L", "und": "X", "at": "2026-09-24T10:00", "dir": "L"},
+                                                       {"k": "Y|2026-09-24T10:00|L", "und": "Y", "at": "2026-09-24T10:00", "dir": "L"}]})}
+        calls = []
+
+        def market():
+            calls.append(1)
+            return {"X": self.bars()}, {"X": self.daily()}
+        prev = {"journals": {"anna": {"context": {"Y|2026-09-24T10:00|L": {"feats": {"gap": "cached"}}}}}}
+        res = export({user_id("anna"): json.dumps(box).encode()}, {"anna": "pw1"}, ITER, previous=prev, market=market)
+        j = res["journals"]["anna"]
+        self.assertEqual(j["uid"], user_id("anna"))
+        self.assertEqual(j["context"]["Y|2026-09-24T10:00|L"]["feats"]["gap"], "cached")
+        self.assertEqual(j["context"]["X|2026-09-24T10:00|L"]["feats"]["mom"], "Med första halvtimmen")
 
 
 if __name__ == "__main__":

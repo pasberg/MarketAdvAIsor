@@ -41,7 +41,7 @@ class Rules(unittest.TestCase):
     def test_momentum_trades_the_last_half_hour(self):
         closes = [100 + i * 0.1 for i in range(20)]
         d = session(closes)
-        s, entry, px = il.momentum(d, 0.0)
+        s, entry, px, _ = il.momentum(d, 0.0)
         self.assertEqual(s, 1)
         self.assertEqual(entry, d["o"][14])
         self.assertEqual(px, d["c"][-1])
@@ -50,8 +50,9 @@ class Rules(unittest.TestCase):
     def test_gap_fade_targets_the_previous_close(self):
         # gap up 2 % from 100; short from bar 2's open 101.8, target 100
         d = session([101.8, 101.5, 100.5, 99.8, 100.2], opens=[102, 101.8, 101.5, 100.5, 99.8], prev=100)
-        s, entry, px = il.gap(d, 1.0)
+        s, entry, px, info = il.gap(d, 1.0)
         self.assertEqual((s, entry, px), (-1, 101.8, 100))
+        self.assertAlmostEqual(info["size"], 2.0)
 
 
 class Run(unittest.TestCase):
@@ -73,6 +74,8 @@ class Run(unittest.TestCase):
         for f in res["families"]:
             self.assertLessEqual(len(f["variants"]), 2)
             self.assertIn("0.15", f["best"]["by_cost"])
+        gap = next(f for f in res["families"] if f["id"] == "momentum")
+        self.assertEqual([g["title"] for g in gap["breakdown"]["groups"]], ["Riktning", "Första halvtimmens rörelse", "Marknad"])
 
 
 if __name__ == "__main__":

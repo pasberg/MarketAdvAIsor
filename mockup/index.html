@@ -452,6 +452,9 @@ body.locked .top,body.locked main{filter:blur(7px) saturate(.7);pointer-events:n
           <label class="bt-f">Horisont<select name="hz"><option value="intradag">Intradag</option><option value="vecka">Vecka</option><option value="manad">Månad</option><option value="kvartal">Kvartal</option><option value="halvar">Halvår</option><option value="ar">År</option></select></label>
           <label class="bt-f">Setup<input name="setup" list="jr-setups" autocomplete="off" placeholder="t.ex. VWAP-rekyl"></label>
           <label class="bt-f">Källa<input name="source" list="jr-sources" autocomplete="off" placeholder="t.ex. MarketMate: namn"></label>
+          <label class="bt-f">Underliggande på sajten<input name="und" list="jr-syms" autocomplete="off" placeholder="t.ex. NVDA — för marknadsläget"></label>
+          <label class="bt-f">Signaltid (källans inlägg)<input name="sigTime" type="datetime-local"></label>
+          <label class="bt-f">Signalpris (källans entry)<input name="sigPrice" type="number" step="any"></label>
           <label class="bt-f">Öppnad<input name="open" type="datetime-local" required></label>
           <label class="bt-f">Stängd<input name="close" type="datetime-local"></label>
           <label class="bt-f">Antal<input name="qty" type="number" step="any" min="0"></label>
@@ -1309,7 +1312,11 @@ function renderIntraLab(out,IL,root,weekly,ilTab){
         <td>${t.t==null?'–':f1(t.t)}</td>${mk.map(m=>{const x=(b.by_market||{})[m]||{};return `<td class="${cls(x.avg)}">${x.n?pc(x.avg):'–'}</td>`}).join('')}
         <td>${f.id==='open_close'?'<span class="no-flag">Jämförelse</span>':f.robust?'<span class="ok-flag">Robust</span>':'<span class="no-flag">Nej</span>'}</td></tr>`}).join('')}
       </tbody></table></div></div>
-    <p class="bt-note">Varje affär öppnas och stängs samma dag: Norden 09:00–17:25, USA 15:30–22:00, valutor 08:00–22:00. Signalen använder bara staplar till och med sin egen stängning, och affären görs på nästa staplens öppning. Stop loss fylls på nivån, eller på öppningen om kursen har gått förbi den. <b>Snitt per affär</b> är efter ${f2(IL.base_cost)} % kostnad och gäller kontrollperioden, alltså dagarna efter att inställningen valdes. Kolumnerna per marknad är också kontrollperioden. <b>Robust</b> kräver minst 100 affärer, positivt snitt både före och i kontrollperioden och ett t-värde över 2 (liten risk att resultatet är slump). Kostnaden avgör mycket: med certifikat (ca 0,15 % spread) krävs en fördel på mer än 0,15 % per affär. Resultaten blir säkrare för varje dag arkivet växer.</p>`;
+    ${IL.families.filter(f=>f.breakdown).map(f=>`<div class="bt-card" style="margin-top:20px"><h3 class="sec-t"><span>${esc(f.name)} uppdelad</span><span>alla ${IL.days} dagar · ${esc(fmtP(f.breakdown.params))}</span></h3>
+      <div class="jr-groups" style="margin:0;padding:0 16px 16px">${f.breakdown.groups.map(g=>`<div><div class="bt-scroll"><table class="bt-tbl"><thead><tr><th>${esc(g.title)}</th><th>Affärer</th><th>Vinstandel</th><th>Före kostnad</th><th>Efter ${f2(IL.base_cost)} %</th><th>t-värde</th></tr></thead><tbody>
+        ${g.rows.map(r=>`<tr><td style="text-align:left;font-family:var(--body)">${esc(r.label)}</td><td>${r.n}</td><td>${Math.round(r.win*100)} %</td><td class="${cls(r.gross)}">${pc(r.gross)}</td><td class="${cls(r.net)}">${pc(r.net)}</td><td>${r.t==null?'–':f1(r.t)}</td></tr>`).join('')}
+      </tbody></table></div></div>`).join('')}</div></div>`).join('')}
+    <p class="bt-note">Uppdelningarna visar var resultatet kommer ifrån, på alla dagar med den vidaste inställningen. De används inte för att välja inställning, eftersom ett urval ur många små grupper nästan alltid hittar något som ser bra ut av slump. <b>Före kostnad</b> visar om regeln alls har en riktning: är det negativt tjänar motsatt affär (t.ex. gap-and-go i stället för fyllnad) på det. Varje affär öppnas och stängs samma dag: Norden 09:00–17:25, USA 15:30–22:00, valutor 08:00–22:00. Signalen använder bara staplar till och med sin egen stängning, och affären görs på nästa staplens öppning. Stop loss fylls på nivån, eller på öppningen om kursen har gått förbi den. <b>Snitt per affär</b> är efter ${f2(IL.base_cost)} % kostnad och gäller kontrollperioden, alltså dagarna efter att inställningen valdes. Kolumnerna per marknad är också kontrollperioden. <b>Robust</b> kräver minst 100 affärer, positivt snitt både före och i kontrollperioden och ett t-värde över 2 (liten risk att resultatet är slump). Kostnaden avgör mycket: med certifikat (ca 0,15 % spread) krävs en fördel på mer än 0,15 % per affär. Resultaten blir säkrare för varje dag arkivet växer.</p>`;
 }
 function renderLab(){
   const out=document.getElementById('lab-out');
@@ -1515,7 +1522,7 @@ async function fetchParts(base,auth){
   let dekRaw=null;
   if(auth){dekRaw=await unwrapDek(auth,session);if(!dekRaw)return 'locked'}
   const manifest=await getJSON(base+'manifest.json');
-  const parts=await Promise.all(['intra','hour','daily','log','lab','archive','calib','intralab'].map(async p=>{
+  const parts=await Promise.all(['intra','hour','daily','log','lab','archive','calib','intralab','journal'].map(async p=>{
     const hit=partCache[p];if(manifest&&hit&&manifest[p]&&hit.gen===manifest[p])return hit.data;
     let d=null;
     if(auth){const bx=await getJSON(base+p+'.enc.json');if(bx){try{d=JSON.parse(new TextDecoder().decode(await unpack(bx,await openBox(dekRaw,bx))))}catch(e){}}}
@@ -1529,6 +1536,7 @@ async function fetchParts(base,auth){
   const ar=parts[5];if(merged&&ar){merged.archive=ar;merged.parts.archive=ar.generated}
   const cb=parts[6];if(merged&&cb){merged.calib=cb;merged.parts.calib=cb.generated}
   const il=parts[7];if(merged&&il){merged.intralab=il;merged.parts.intralab=il.generated}
+  const jn=parts[8];if(merged&&jn){merged.journal=jn;merged.parts.journal=jn.generated}
   return merged;
 }
 async function loadData(){
@@ -1603,8 +1611,17 @@ async function jrLoad(){
   if(JR.token)jrSync();
 }
 async function jrStore(){try{localStorage.setItem(jrLocalKey(),JSON.stringify(await jrSeal(JR.data)))}catch(e){JR.sync='Kunde inte spara lokalt: '+e.message}}
+// market context the publish computes from the archive (journal_export.py), keyed by instrument, time and view
+const ctxKey=t=>t.und&&t.at?`${t.und}|${t.at}|${t.dir==='S'?'S':'L'}`:null;
+function jrCtx(){
+  const J=REAL&&REAL.journal&&REAL.journal.journals;if(!J||!JR.uid)return {};
+  const mine=Object.values(J).find(j=>j&&j.uid===JR.uid);return (mine&&mine.context)||{};
+}
+// the trades the publish should compute a market context for
+function jrReq(){JR.data.ctxReq=[...new Map(jrTrades().map(t=>[ctxKey(t),t]).filter(([k])=>k)).entries()].map(([k,t])=>({k,und:t.und,at:t.at,dir:t.dir==='S'?'S':'L'}))}
 async function jrSave(){
-  JR.data.updated=new Date().toISOString();await jrStore();
+  JR.data.updated=new Date().toISOString();
+  jrReq();await jrStore();
   clearTimeout(JR.timer);if(JR.token)JR.timer=setTimeout(jrSync,1500);
   renderJournal();
 }
@@ -1636,6 +1653,7 @@ async function jrSync(){
       if(r.status===200){const j=await r.json();sha=j.sha;JR.data=jrMerge(JR.data,await jrOpen(JSON.parse(atob(j.content.replace(/\s/g,'')))))}
       else if(r.status===401||r.status===403){JR.sync='Token nekades — kontrollera att den har Contents: Read and write för repot';return}
       else if(r.status!==404){JR.sync='Synk misslyckades ('+r.status+')';return}
+      jrReq();
       const put=await gh('PUT',path,{message:'Dagbok '+new Date().toISOString().slice(0,16),branch:JR_BRANCH,
         content:btoa(JSON.stringify(await jrSeal(JR.data))),...(sha?{sha}:{})});
       if(put.ok){JR.sync='ok';JR.syncAt=Date.now();await jrStore();return}
@@ -1670,6 +1688,15 @@ function parseAvanza(text){
   });
   return out;
 }
+// the site instrument behind a traded name: a symbol, a share's name, or the name inside a product ("BULL NVIDIA X5 VON")
+function guessUnd(name){
+  if(!name)return null;const up=name.toUpperCase().trim(),padded=' '+up+' ';
+  if(T[up])return up;
+  for(const [s,t] of Object.entries(T))if(t[0].toUpperCase()===up)return s;
+  let best=null,len=0;
+  for(const [s,a] of Object.entries(AVZ)){const n=(a[1]||'').toUpperCase();if(n.length>2&&n.length>len&&padded.includes(' '+n+' ')){best=s;len=n.length}}
+  return best;
+}
 const guessProduct=n=>/^(bull|bear)\b/i.test(n)?'certifikat':/^(mini|turbo)\b/i.test(n)?'mini':/\b(warrant|put|call)\b/i.test(n)?'warrant':'aktie';
 const guessView=n=>/^bear\b/i.test(n)||/^(mini|turbo)\s*s(hort)?\b/i.test(n)?'S':'L';
 function roundTrips(fills){
@@ -1695,7 +1722,7 @@ function roundTrips(fills){
 // ---- trades with computed result and R
 function jrTrades(){
   const d=JR.data,avz=roundTrips(d.fills).map(t=>{const n=d.notes[t.id]||{};const o=Object.assign({},t);
-    for(const k of ['setup','source','hz','dir','stop','target','notes','product'])if(n[k]!=null&&n[k]!=='')o[k]=n[k];return o});
+    for(const k of ['setup','source','hz','dir','stop','target','notes','product','und','sigTime','sigPrice','open','close'])if(n[k]!=null&&n[k]!=='')o[k]=n[k];return o});
   const man=d.trades.filter(t=>!t.del).map(t=>Object.assign({src:'manual'},t));
   return avz.concat(man).map(t=>{
     const posL=t.src==='avanza'?t.pos==='L':!(t.dir==='S'&&(t.product==='aktie'||t.product==='annat'));
@@ -1704,7 +1731,13 @@ function jrTrades(){
     let pnl=num(t.pnlSEK);
     if(pnl==null&&closed&&entry!=null&&exit!=null&&qty)pnl=sg*(exit-entry)*qty*(FX[t.cur]||1)-(num(t.fees)||0);
     const r=closed&&stop!=null&&entry!=null&&exit!=null&&entry!==stop?sg*(exit-entry)/Math.abs(entry-stop):null;
-    return Object.assign(t,{entry,exit,stop,qty,pnl,r,closed});
+    // copying a source: delay and price paid against its signal, and its result from the signal price
+    const sig=num(t.sigPrice),hasT=x=>/T\d\d:\d\d/.test(x||'')&&!/T00:00$/.test(x);
+    const delay=hasT(t.sigTime)&&hasT(t.open)?(Date.parse(t.open)-Date.parse(t.sigTime))/60000:null;
+    const slip=sig&&entry!=null?sg*(entry/sig-1)*100:null;
+    const srcRet=sig&&closed&&exit!=null?sg*(exit/sig-1)*100:null,ownRet=closed&&entry&&exit!=null?sg*(exit/entry-1)*100:null;
+    const und=(t.und||'').toUpperCase()||guessUnd(t.name);
+    return Object.assign(t,{entry,exit,stop,qty,pnl,r,closed,delay,slip,srcRet,ownRet,und,at:hasT(t.sigTime)?t.sigTime:t.open});
   }).sort((a,b)=>String(b.close||b.open).localeCompare(String(a.close||a.open)));
 }
 function jrStats(ts){
@@ -1724,6 +1757,38 @@ function jrGroup(title,ts,keyFn){
   return `<div class="bt-card"><h3 class="sec-t" style="padding:14px 16px 0"><span>${title}</span><span>stängda affärer</span></h3><div class="bt-scroll"><table class="bt-tbl jr-tbl"><thead><tr><th>${title.replace(/^Per /,'')}</th><th>Affärer</th><th>Vinstandel</th><th>Snitt-R</th><th>Förväntan</th><th>Resultat</th></tr></thead><tbody>
     ${rows.map(([k,s])=>`<tr><td class="l">${esc(k)}${s.n<20?' <span class="jr-small">litet underlag</span>':''}</td><td>${s.n}</td><td>${pctOf(s.win,s.n)}</td><td>${s.avgR==null?'–':sgn(s.avgR,f2)+'R'}</td><td class="${(s.avg||0)>=0?'pos':'neg'}">${kr(s.avg)}</td><td class="${s.sum>=0?'pos':'neg'}">${kr(s.sum)}</td></tr>`).join('')}
   </tbody></table></div></div>`;
+}
+// copying a source: what the delay costs
+function jrCopy(ts){
+  const g={};for(const t of ts)if(t.source&&t.sigPrice!=null&&t.sigPrice!=='')(g[t.source]||(g[t.source]=[])).push(t);
+  const rows=Object.entries(g);if(!rows.length)return '';
+  const avg=(a,k)=>{const v=a.map(t=>t[k]).filter(x=>x!=null&&isFinite(x));return v.length?v.reduce((x,y)=>x+y,0)/v.length:null};
+  const pc=v=>v==null?'–':sgn(v,f2)+' %';
+  return `<div class="bt-card" style="margin-top:20px"><h3 class="sec-t" style="padding:14px 16px 0"><span>Kopiering per källa</span><span>affärer med signalpris</span></h3><div class="bt-scroll"><table class="bt-tbl jr-tbl"><thead><tr><th>Källa</th><th>Affärer</th><th>Fördröjning</th><th>Sämre pris än signalen</th><th>Källans resultat</th><th>Ditt resultat</th><th>Skillnad</th></tr></thead><tbody>
+    ${rows.map(([k,a])=>{const d=avg(a,'delay'),sr=avg(a.filter(t=>t.closed),'srcRet'),or=avg(a.filter(t=>t.closed),'ownRet');
+      return `<tr><td class="l">${esc(k)}${a.length<20?' <span class="jr-small">litet underlag</span>':''}</td><td>${a.length}</td><td>${d==null?'–':Math.round(d)+' min'}</td><td class="${(avg(a,'slip')||0)>0?'neg':'pos'}">${pc(avg(a,'slip'))}</td>
+        <td class="${(sr||0)>=0?'pos':'neg'}">${pc(sr)}</td><td class="${(or||0)>=0?'pos':'neg'}">${pc(or)}</td><td class="${(or!=null&&sr!=null&&or-sr>=0)?'pos':'neg'}">${or!=null&&sr!=null?pc(or-sr):'–'}</td></tr>`}).join('')}
+  </tbody></table></div><p class="bt-note" style="padding:0 16px 14px">Resultat i procent av priset, före avgifter: källans räknat från signalpriset, ditt från din entry — båda till din exit. Skillnaden är vad fördröjningen och ditt genomförande kostar.</p></div>`;
+}
+// what the market looked like at entry, per source (context from the archive)
+const CTX_FEATS=[['gap','Gap vid öppningen'],['mom','Första halvtimmen'],['day','Dagens rörelse fram till entry'],['vwap','VWAP vid entry'],['trend','Dagstrend (EMA 50)'],['tod','Tid efter öppning']];
+JR.ctxSrc='';
+function jrContext(ts){
+  const C=jrCtx(),withC=ts.filter(t=>C[ctxKey(t)]);
+  const srcs=[...new Set(ts.map(t=>t.source).filter(Boolean))];
+  const pick=withC.filter(t=>!JR.ctxSrc||t.source===JR.ctxSrc);
+  const head=`<h3 class="sec-t" style="padding:14px 16px 0"><span>Marknadsläget vid entry</span><span>${withC.length} av ${ts.length} affärer</span></h3>`;
+  if(!withC.length)return `<div class="bt-card" style="margin-top:20px">${head}<p class="bt-note" style="padding:0 16px 14px">Här syns hur marknaden såg ut när du — eller källan du följde — gick in: gap, första halvtimmen, dagens rörelse, VWAP, dagstrend och tid efter öppning, och vilka lägen som gav vinst. Det räknas ut från intradagsarkivet vid nästa publicering för affärer som har <b>underliggande på sajten</b> och en tid (signaltid eller tid för entry), och kräver att dagboken synkas. Arkivet börjar 30 juni 2026.</p></div>`;
+  const tables=CTX_FEATS.map(([k,title])=>{
+    const g={};for(const t of pick){const c=C[ctxKey(t)],v=c&&c.feats&&c.feats[k];if(v)(g[v]||(g[v]=[])).push(t)}
+    const n=Object.values(g).reduce((a,x)=>a+x.length,0);if(!n)return '';
+    return `<div class="bt-card"><h3 class="sec-t" style="padding:14px 16px 0"><span>${title}</span><span>${n} affärer</span></h3><div class="bt-scroll"><table class="bt-tbl jr-tbl"><thead><tr><th>Läge</th><th>Andel</th><th>Stängda</th><th>Vinstandel</th><th>Förväntan</th></tr></thead><tbody>
+      ${Object.entries(g).sort((a,b)=>b[1].length-a[1].length).map(([v,a])=>{const st=jrStats(a);return `<tr><td class="l">${esc(v)}</td><td>${Math.round(a.length/n*100)} %</td><td>${st.n}</td><td>${pctOf(st.win,st.n)}</td><td class="${(st.avg||0)>=0?'pos':'neg'}">${kr(st.avg)}</td></tr>`}).join('')}
+    </tbody></table></div></div>`}).join('');
+  return `<div class="bt-card" style="margin-top:20px">${head}
+    <div class="jr-bar" style="padding:8px 16px 0"><label class="bt-f">Källa<select data-jr-ctxsrc><option value="">Alla affärer</option>${srcs.map(x=>`<option${x===JR.ctxSrc?' selected':''}>${esc(x)}</option>`).join('')}</select></label></div>
+    <p class="bt-note" style="padding:0 16px">Andel visar källans (eller din) profil — vilka lägen affärerna görs i. Vinstandel och förväntan visar vilka lägen som fungerar. "Med" betyder i affärens riktning: en lång affär efter ett gap upp går med gapet.</p></div>
+    <div class="jr-groups">${tables}</div>`;
 }
 let jrChart=null;
 async function renderJournal(){
@@ -1760,6 +1825,8 @@ async function renderJournal(){
       ${jrGroup('Per veckodag',ts,dow)}
       ${jrGroup('Per öppningstimme',ts.filter(hourOf),hourOf)}
     </div>
+    ${jrCopy(ts)}
+    ${jrContext(ts)}
     <div class="bt-card" style="margin-top:20px"><h3 class="sec-t" style="padding:14px 16px 0"><span>Affärer</span><span>${ts.length} st · klicka Ändra för setup, stop loss och källa</span></h3>
       <div class="bt-scroll"><table class="bt-tbl jr-tbl"><thead><tr><th>Öppnad</th><th>Stängd</th><th>Instrument</th><th>Syn</th><th>Setup</th><th>Källa</th><th>Entry</th><th>Exit</th><th>Stop</th><th>R</th><th>Resultat</th><th></th></tr></thead><tbody>
       ${ts.map(t=>`<tr><td>${esc(String(t.open||'').replace('T',' '))}</td><td>${t.close?esc(String(t.close).replace('T',' ')):'<span class="jr-small">öppen</span>'}</td>
@@ -1806,19 +1873,23 @@ function jrOpenForm(id){
   const now=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);
   const v=t||{dir:'L',product:'aktie',hz:state.hz,open:now,cur:'SEK'};
   for(const el of f.elements){if(!el.name)continue;const x=v[el.name];el.value=x==null?'':el.type==='datetime-local'&&/^\d{4}-\d\d-\d\d$/.test(x)?x+'T00:00':x;
-    el.disabled=avz&&['name','open','close','qty','entry','exit','fees','pnlSEK','cur'].includes(el.name)}
+    el.disabled=avz&&['name','qty','entry','exit','fees','pnlSEK','cur'].includes(el.name)}
   document.getElementById('jr-dlg-t').textContent=t?'Ändra affär':'Ny affär';
-  document.getElementById('jr-dlg-hint').textContent=avz?'Importerad från Avanza: priser och resultat kommer från exporten. Lägg till setup, källa, horisont och planerad stop loss.':'Priser anges för det du handlade (för ett certifikat: certifikatets kurs). Lämna Stängd och Exit tomma för en öppen affär.';
+  document.getElementById('jr-dlg-hint').textContent=avz?'Importerad från Avanza: priser och resultat kommer från exporten. Lägg till setup, källa, horisont och planerad stop loss. Exporten saknar klockslag — ange tiden för din entry under Öppnad om du vet den.':'Priser anges för det du handlade (för ett certifikat: certifikatets kurs). Lämna Stängd och Exit tomma för en öppen affär.';
   document.getElementById('jr-del').hidden=!t;
   document.getElementById('jr-dlg').showModal();
 }
 document.getElementById('jr-form').addEventListener('submit',async e=>{
   const f=e.target,o={};for(const el of f.elements)if(el.name&&!el.disabled)o[el.name]=el.value.trim();
   if(jrEditing&&jrEditing.src==='avanza'){
-    JR.data.notes[jrEditing.id]={setup:o.setup,source:o.source,hz:o.hz,dir:o.dir,product:o.product,stop:o.stop,target:o.target,notes:o.notes,mod:Date.now()};
+    // Avanza gives dates only: a time entered for the entry or exit is kept as an override
+    const withTime=v=>v&&!/T00:00$/.test(v)?v:'';
+    JR.data.notes[jrEditing.id]={setup:o.setup,source:o.source,hz:o.hz,dir:o.dir,product:o.product,stop:o.stop,target:o.target,notes:o.notes,
+      und:o.und.toUpperCase(),sigTime:o.sigTime,sigPrice:o.sigPrice,open:withTime(o.open),close:withTime(o.close),mod:Date.now()};
   }else{
     const id=jrEditing?jrEditing.id:'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
     const sym=T[o.name.toUpperCase()]?o.name.toUpperCase():null;
+    o.und=(o.und||'').toUpperCase();
     JR.data.trades=JR.data.trades.filter(t=>t.id!==id).concat([Object.assign(o,{id,sym,mod:Date.now()})]);
   }
   await jrSave();
@@ -1846,6 +1917,7 @@ document.getElementById('jr-backup').addEventListener('change',async e=>{
   try{const d=JSON.parse(await readText(file));if(!d||!Array.isArray(d.trades)||!Array.isArray(d.fills))throw new Error('Inte en säkerhetskopia av dagboken.');
     JR.data=jrMerge(JR.data,d);await jrSave();alert('Säkerhetskopian är inläst och sammanslagen med dagboken.')}catch(err){alert(err.message)}
 });
+document.getElementById('journal').addEventListener('change',e=>{const sel=e.target.closest('[data-jr-ctxsrc]');if(sel){JR.ctxSrc=sel.value;renderJournal()}});
 document.getElementById('journal').addEventListener('click',async e=>{
   const ed=e.target.closest('[data-jr-edit]');if(ed){jrOpenForm(ed.dataset.jrEdit);return}
   const b=e.target.closest('[data-jr]');if(!b)return;

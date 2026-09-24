@@ -81,7 +81,7 @@ def momentum(d, threshold: float):
         return None
     s = 1 if first > 0 else -1
     i = n - 6  # the last half hour (six 5-minute bars)
-    return s, d["o"][i], d["c"][-1]
+    return s, d["o"][i], d["c"][-1], {"size": abs(first) * 100}
 
 
 def gap(d, g: float):
@@ -97,7 +97,7 @@ def gap(d, g: float):
         return None
     stop = entry * (1 + gp)  # one gap further away from the previous close
     px, _ = exit_with_stop(d, s, 1, stop, target=prev)
-    return s, entry, px
+    return s, entry, px, {"size": abs(gp) * 100}
 
 
 def vwap_revert(d, k: float):
@@ -169,9 +169,10 @@ def run_rule(sess: dict[str, list[dict]], fn, params: dict) -> list[dict]:
         for d in days:
             r = fn(d, **params)
             if r:
-                s, entry, px = r
+                s, entry, px = r[:3]
                 if entry > 0:
-                    trades.append({"sym": sym, "day": d["day"], "ret": s * (px / entry - 1) * 100, "s": s})
+                    trades.append({"sym": sym, "day": d["day"], "ret": s * (px / entry - 1) * 100, "s": s,
+                                   **(r[3] if len(r) > 3 else {})})
     return trades
 
 
@@ -189,6 +190,31 @@ def stats(trades: list[dict], cost: float = BASE_COST) -> dict:
             "t": float(r.mean() / sd * math.sqrt(n)) if sd > 0 else None,
             "sharpe": float(d.mean() / d.std(ddof=1) * math.sqrt(252)) if len(d) > 2 and d.std(ddof=1) > 0 else None,
             "days": len(d), "long": float(np.mean([t["s"] > 0 for t in trades]))}
+
+
+# how the gap and momentum rules did in different situations (all days, the widest setting: no new
+# parameters are chosen from this, it only describes where the results come from)
+BREAKDOWN = {
+    "gap": {"dir": ("Riktning", lambda t: "Gap upp → kort (fyllnad nedåt)" if t["s"] < 0 else "Gap ned → lång (fyllnad uppåt)"),
+            "size": ("Gapets storlek", lambda t: "0,5–1 %" if t["size"] < 1 else "1–2 %" if t["size"] < 2 else "Mer än 2 %")},
+    "momentum": {"dir": ("Riktning", lambda t: "Upp första halvtimmen → lång" if t["s"] > 0 else "Ned första halvtimmen → kort"),
+                 "size": ("Första halvtimmens rörelse", lambda t: "under 0,25 %" if t["size"] < 0.25 else "0,25–0,5 %" if t["size"] < 0.5
+                          else "0,5–1 %" if t["size"] < 1 else "Mer än 1 %")},
+}
+
+
+def breakdown(trades: list[dict], groups: dict, market: dict) -> list[dict]:
+    out = []
+    by = dict(groups, market=("Marknad", lambda t: market[t["sym"]]))
+    for key, (title, fn) in by.items():
+        g: dict[str, list] = {}
+        for t in trades:
+            g.setdefault(fn(t), []).append(t)
+        rows = [{"label": k, "n": len(v), "win": stats(v)["win"], "gross": float(np.mean([t["ret"] for t in v])),
+                 "net": stats(v)["avg"], "t": stats(v)["t"]}
+                for k, v in sorted(g.items(), key=lambda kv: (np.mean([t.get("size", 0) for t in kv[1]]) if key == "size" else 0, kv[0]))]
+        out.append({"title": title, "rows": rows})
+    return out
 
 
 def run(bars: dict[str, dict], kinds: dict[str, dict]) -> dict:
@@ -211,7 +237,11 @@ def run(bars: dict[str, dict], kinds: dict[str, dict]) -> dict:
         best = max(variants, key=lambda v: v["train"].get("avg", -1e9))
         te, trn = best["test"], best["train"]
         robust = bool(te.get("n", 0) >= 100 and trn.get("avg", -1) > 0 and te.get("avg", -1) > 0 and (te.get("t") or 0) > 2)
-        fams.append({"id": key, "name": fam["name"], "desc": fam["desc"], "best": best, "variants": variants, "robust": robust})
+        entry = {"id": key, "name": fam["name"], "desc": fam["desc"], "best": best, "variants": variants, "robust": robust}
+        if key in BREAKDOWN:
+            wide = fam["grid"][0]
+            entry["breakdown"] = {"params": wide, "groups": breakdown(run_rule(sess, fam["fn"], wide), BREAKDOWN[key], market)}
+        fams.append(entry)
     iso = lambda d: datetime.fromtimestamp(d * 86400, timezone.utc).strftime("%Y-%m-%d")
     return {"part": "intralab", "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "days": len(days), "from": iso(days[0]), "to": iso(days[-1]), "split": iso(split),
