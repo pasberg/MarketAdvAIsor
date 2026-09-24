@@ -303,6 +303,10 @@ table.wl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
 .jr-tbl td.l{text-align:left;font-family:var(--body)}
 .jr-tbl button{font:inherit;font-size:12px;border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:2px 8px;cursor:pointer}
 .jr-small{color:var(--faint);font-size:11px}
+.jr-acct{border:1px solid var(--line);border-radius:14px;background:var(--surface);color:inherit;padding:20px;width:min(560px,calc(100vw - 32px))}
+.jr-acct::backdrop{background:rgba(0,0,0,.45)}
+.jr-acct h3{margin:0 0 4px;font-size:18px}
+.jr-acct-row{display:flex;gap:8px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line-2);cursor:pointer}
 #jr-dlg{border:1px solid var(--line);border-radius:14px;background:var(--surface);color:inherit;padding:20px;width:min(720px,calc(100vw - 32px));max-height:calc(100vh - 32px)}
 #jr-dlg::backdrop{background:rgba(0,0,0,.45)}
 #jr-dlg h3{margin:0 0 4px;font-size:18px}
@@ -1637,6 +1641,7 @@ function jrMerge(a,b){
   for(const t of [...(a.trades||[]),...(b.trades||[])]){const o=tk.get(t.id);if(!o||(t.mod||0)>(o.mod||0))tk.set(t.id,t)}
   out.trades=[...tk.values()];
   out.updated=[a.updated,b.updated].filter(Boolean).sort().pop()||null;
+  out.skipAcct=a.skipAcct||b.skipAcct;
   return out;
 }
 // ---- GitHub sync (contents API on the journal branch)
@@ -1677,42 +1682,61 @@ function parseAvanza(text){
   const seen={},out=[];
   lines.slice(1).forEach(line=>{
     const x=line.split(d).map(v=>v.replace(/^"|"$/g,'').trim()),type=(x[c.type]||'').toLowerCase();
-    const side=/^köp|^kop/.test(type)?'B':/^sälj|^salj/.test(type)?'S':null;
+    // Inlösen (redemption, knock-out, expiry): a row with the quantity closes the position like a sale,
+    // the cash paid out (if any) comes as a separate row without quantity
+    const redeem=/^inlösen|^inlosen/.test(type),rawQty=jrNum(x[c.qty]);
+    let side=/^köp|^kop/.test(type)?'B':/^sälj|^salj/.test(type)?'S':redeem?(isNaN(rawQty)?'X':'S'):null;
     if(!side)return;
-    const qty=Math.abs(jrNum(x[c.qty])),px=jrNum(x[c.px]);if(!(qty>0)||!(px>=0))return;
+    const qty=Math.abs(rawQty),px=isNaN(jrNum(x[c.px]))?0:jrNum(x[c.px]);
+    if(side!=='X'&&!(qty>0))return;
+    if(side==='X'&&isNaN(jrNum(x[c.amt])))return;
     const n=seen[line]=(seen[line]||0)+1;
     const tcur=(c.tcur>=0?x[c.tcur]:c.cur>=0?x[c.cur]:'SEK')||'SEK',amt=jrNum(x[c.amt]);
-    out.push({k:'a'+hash(line).toString(36)+'.'+n,date:(x[c.date]||'').slice(0,10),side,name:x[c.name],qty,px,
+    out.push({k:'a'+hash(line).toString(36)+'.'+n,date:(x[c.date]||'').slice(0,10),side,name:x[c.name],qty:side==='X'?0:qty,px,redeem,
       amt:isNaN(amt)?null:amt*(tcur==='SEK'?1:(FX[tcur]||1)),fee:Math.abs(jrNum(x[c.fee]))||0,
       cur:(c.icur>=0&&x[c.icur])||(c.cur>=0&&x[c.cur])||'SEK',isin:c.isin>=0?x[c.isin]:'',acct:c.acct>=0?x[c.acct]:'',i:out.length});
   });
+  // Avanza lists the newest row first, also within a day: number the rows in time order
+  if(out.length>1&&out[0].date>out[out.length-1].date)out.forEach((f,j)=>{f.i=out.length-1-j});
   return out;
 }
 // the site instrument behind a traded name: a symbol, a share's name, or the name inside a product ("BULL NVIDIA X5 VON")
 function guessUnd(name){
-  if(!name)return null;const up=name.toUpperCase().trim(),padded=' '+up+' ';
+  if(!name)return null;
+  const up=name.toUpperCase().trim(),padded=' '+up.replace(/\b(SHRT|LONG)(?=[A-ZÅÄÖ]{2})/g,'')+' ';
   if(T[up])return up;
+  for(const w of padded.trim().split(/\s+/))if(T[w]&&w.length>1)return w; // "TLNG NVDA VT737"
+  const ALIAS={NASD:'NDX100',NDX:'NDX100',SP500:'SPX',SPX:'SPX',SILV:'SILVER',GC1:'GOLD',OMXS30:'OMXS30'}; // Avanza's short names
+  for(const w of padded.trim().split(/\s+/))if(ALIAS[w]&&T[ALIAS[w]])return ALIAS[w];
+
   for(const [s,t] of Object.entries(T))if(t[0].toUpperCase()===up)return s;
   let best=null,len=0;
   for(const [s,a] of Object.entries(AVZ)){const n=(a[1]||'').toUpperCase();if(n.length>2&&n.length>len&&padded.includes(' '+n+' ')){best=s;len=n.length}}
   return best;
 }
-const guessProduct=n=>/^(bull|bear)\b/i.test(n)?'certifikat':/^(mini|turbo)\b/i.test(n)?'mini':/\b(warrant|put|call)\b/i.test(n)?'warrant':'aktie';
-const guessView=n=>/^bear\b/i.test(n)||/^(mini|turbo)\s*s(hort)?\b/i.test(n)?'S':'L';
+// Avanza's product names: BULL/BEAR/B (certificates), MINI/MFL/MFS, TURBO/TLNG/TSRT (knock-out products)
+const guessProduct=n=>/^(bull|bear|b)\s/i.test(n)?'certifikat':/^(mini|turbo|mfl|mfs|tlng|tsrt)\b/i.test(n)?'mini':/\b(warrant|put|call)\b/i.test(n)?'warrant':'aktie';
+const guessView=n=>/^(bear|mfs|tsrt)\b/i.test(n)||/^(mini|turbo)\s+s(hort)?\b/i.test(n)||/^b\s+(shrt|short)/i.test(n)?'S':'L';
 function roundTrips(fills){
   const by={},out=[],ids={};
   for(const f of fills)(by[f.name+'|'+f.acct]||(by[f.name+'|'+f.acct]=[])).push(f);
   for(const fs of Object.values(by)){
     fs.sort((a,b)=>a.date.localeCompare(b.date)||a.i-b.i);
     let t=null,pos=0;
+    let last=null;
     for(const f of fs){
-      const q=f.side==='B'?f.qty:-f.qty;
+      if(f.side==='X'){const to=t||last;if(to){to.amt+=f.amt||0}continue} // cash from a redemption
+      // a sale with no purchase in the file is a position from before the exported period: left out
+      if(!t&&f.side!=='B')continue;
+      let q=f.side==='B'?f.qty:-f.qty,share=1;
+      if(q<0&&-q>pos+1e-9){share=pos/-q;q=-pos} // sold more than was bought in the period: only that part counts
       if(!t){const base='avz|'+f.name+'|'+f.date;ids[base]=(ids[base]||0)+1;
         t={id:base+'|'+ids[base],src:'avanza',name:f.name,pos:q>0?'L':'S',dir:q>0?guessView(f.name):'S',product:guessProduct(f.name),
           open:f.date,inQ:0,inV:0,outQ:0,outV:0,amt:0,fees:0,cur:f.cur,n:0,hz:null}}
-      if((q>0)===(t.pos==='L')){t.inQ+=f.qty;t.inV+=f.qty*f.px}else{t.outQ+=f.qty;t.outV+=f.qty*f.px}
-      t.amt+=f.amt||0;t.fees+=f.fee;t.n++;pos+=q;
-      if(Math.abs(pos)<1e-9){t.close=f.date;out.push(t);t=null;pos=0}
+      if(q>0){t.inQ+=q;t.inV+=q*f.px}else{t.outQ+=-q;t.outV+=-q*f.px}
+      t.amt+=(f.amt||0)*share;t.fees+=f.fee*share;t.n++;pos+=q;
+      if(f.redeem)t.redeemed=true;
+      if(Math.abs(pos)<1e-9){t.close=f.date;out.push(t);last=t;t=null;pos=0}
     }
     if(t)out.push(t);
   }
@@ -1902,12 +1926,33 @@ document.getElementById('jr-del').addEventListener('click',async()=>{
   else{const t=JR.data.trades.find(x=>x.id===jrEditing.id);if(t){t.del=true;t.mod=Date.now()}}
   document.getElementById('jr-dlg').close();await jrSave();
 });
+// which accounts to import (remembered for the next import)
+function jrPickAccounts(fills,accts){
+  return new Promise(done=>{
+    const lev=n=>guessProduct(n)!=='aktie',skip=new Set(JR.data.skipAcct||[]);
+    const d=document.createElement('dialog');d.id='jr-acct';d.className='jr-acct';
+    d.innerHTML=`<form method="dialog"><h3>Vilka konton ska med?</h3><p class="jr-hint">Välj de konton du handlar på. Fondsparande och andras konton (t.ex. barnens kapitalförsäkringar) gör statistiken missvisande.</p>
+      ${accts.map(a=>{const f=fills.filter(x=>x.acct===a&&x.side!=='X'),l=f.filter(x=>lev(x.name)).length;
+        return `<label class="jr-acct-row"><input type="checkbox" value="${esc(a)}"${skip.has(a)?'':' checked'}> <b>${esc(a)}</b> <span class="jr-small">${f.length} köp/sälj, varav ${l} med hävstång</span></label>`}).join('')}
+      <div class="jr-actions"><span style="flex:1"></span><button class="chip" value="cancel">Avbryt</button><button class="chip jr-primary" value="ok">Importera</button></div></form>`;
+    document.body.appendChild(d);
+    d.addEventListener('close',()=>{
+      const boxes=[...d.querySelectorAll('input[type=checkbox]')],keep=new Set(boxes.filter(b=>b.checked).map(b=>b.value));
+      if(d.returnValue==='ok')JR.data.skipAcct=boxes.filter(b=>!b.checked).map(b=>b.value);
+      d.remove();done(d.returnValue==='ok'?keep:null);
+    });
+    d.showModal();
+  });
+}
 const readText=file=>new Promise((ok,bad)=>{const r=new FileReader();r.onload=()=>ok(r.result);r.onerror=()=>bad(r.error);r.readAsText(file,'utf-8')});
 document.getElementById('jr-csv').addEventListener('change',async e=>{
   const file=e.target.files[0];e.target.value='';if(!file)return;
   try{
     let text=await readText(file);if(text.includes('�'))text=await new Promise(ok=>{const r=new FileReader();r.onload=()=>ok(r.result);r.readAsText(file,'windows-1252')});
-    const fills=parseAvanza(text),known=new Set(JR.data.fills.map(f=>f.k)),added=fills.filter(f=>!known.has(f.k));
+    let fills=parseAvanza(text);
+    const accts=[...new Set(fills.map(f=>f.acct).filter(Boolean))];
+    if(accts.length>1){const keep=await jrPickAccounts(fills,accts);if(!keep)return;fills=fills.filter(f=>keep.has(f.acct))}
+    const known=new Set(JR.data.fills.map(f=>f.k)),added=fills.filter(f=>!known.has(f.k));
     JR.data.fills=JR.data.fills.concat(added);await jrSave();
     alert(`${fills.length} köp och sälj i filen, ${added.length} nya. ${roundTrips(added).length ? 'Affärerna finns nu i listan — lägg till setup och stop loss med Ändra.' : ''}`);
   }catch(err){alert(err.message)}

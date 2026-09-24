@@ -83,6 +83,34 @@ console.log(JSON.stringify({{n:fills.length,sameKeys:fills.map(f=>f.k).join()===
         self.assertAlmostEqual(bear["pnlSEK"], 48)
         self.assertIsNone(by["Ericsson B"].get("close"))  # still open
 
+    def test_avanza_newest_first_redemptions_and_earlier_positions(self):
+        fns = page_functions("jrNum", "guessProduct", "guessView", "parseAvanza", "roundTrips")
+        csv = "\n".join([  # as Avanza exports it: newest row first, also within a day
+            "Datum;Konto;Typ av transaktion;Värdepapper/beskrivning;Antal;Kurs;Belopp;Transaktionsvaluta;Courtage;Valutakurs;Instrumentvaluta;ISIN;Resultat",
+            "2026-09-22;ISK;Inlösen;MFL GULD VT1;;0,77;423,5;SEK;;;SEK;X1;",
+            "2026-09-22;ISK;Inlösen;MFL GULD VT1;-550;0,77;;;;;SEK;X1;-580",
+            "2026-09-20;ISK;Köp;MFL GULD VT1;550;1,82;-1001;SEK;;;SEK;X1;",
+            "2026-09-17;ISK;Inlösen;TSRT NVDA VT2;-100;;;;;;;X2;-1000",
+            "2026-09-16;ISK;Köp;TSRT NVDA VT2;100;10;-1000;SEK;;;SEK;X2;",
+            "2026-09-15;ISK;Sälj;B SHRTOMX DW5 SG;50;4;200;SEK;;;SEK;X3;",
+            "2026-09-15;ISK;Köp;B SHRTOMX DW5 SG;50;5;-250;SEK;;;SEK;X3;",
+            "2026-09-10;ISK;Sälj;Volvo B;10;300;3000;SEK;;;SEK;X4;500",
+        ])
+        r = self.node(f"""const hash=s=>{{let h=2166136261;for(const c of s){{h^=c.charCodeAt(0);h=Math.imul(h,16777619)}}return h>>>0}};
+const FX={{SEK:1}};{fns}
+console.log(JSON.stringify(roundTrips(parseAvanza({json.dumps(csv)}))));""")
+        by = {t["name"]: t for t in r}
+        self.assertNotIn("Volvo B", by)  # sold, never bought in the file: from before the period
+        gold = by["MFL GULD VT1"]  # redeemed at 0.77 with the cash on a separate row
+        self.assertEqual((gold["close"], gold["product"], gold["dir"]), ("2026-09-22", "mini", "L"))
+        self.assertAlmostEqual(gold["pnlSEK"], 423.5 - 1001)
+        knocked = by["TSRT NVDA VT2"]  # knocked out: nothing paid back
+        self.assertEqual((knocked["close"], knocked["dir"]), ("2026-09-17", "S"))
+        self.assertAlmostEqual(knocked["pnlSEK"], -1000)
+        bear = by["B SHRTOMX DW5 SG"]  # bought and sold the same day, sale listed first
+        self.assertEqual((bear["close"], bear["product"], bear["dir"], bear["hz"]), ("2026-09-15", "certifikat", "S", "intradag"))
+        self.assertAlmostEqual(bear["pnlSEK"], -50)
+
 
 class Context(unittest.TestCase):
     D = 20720 * 86400  # 2026-09-24 00:00 as wall clock
