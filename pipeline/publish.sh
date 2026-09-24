@@ -24,6 +24,8 @@ if [[ "$parts" == *daily* ]]; then
   python pipeline/intraday_archive.py --data data --export data/archive_bars.json || echo "::warning::Intradagsarkivet misslyckades"
   # measured hit rates per horizon and score, shown instead of a rule of thumb
   node pipeline/calibrate.js --data data || echo "::warning::Kalibreringen misslyckades"
+  # intraday strategies on the archive
+  python pipeline/intraday_lab.py --data data || echo "::warning::Intradagslabbet misslyckades"
 fi
 # trading journals synced from the page (journal branch) -> encrypted site data
 python pipeline/journal_export.py data/journal.json || echo "::warning::Dagboken kunde inte exporteras"

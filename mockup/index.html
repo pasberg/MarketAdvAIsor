@@ -327,6 +327,7 @@ table.wl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
 .sig-list span.short{background:var(--down-soft);color:var(--down);border-color:transparent}
 .ok-flag{font-size:11px;font-weight:600;padding:2px 7px;border-radius:5px;background:var(--up-soft);color:var(--up);white-space:nowrap}
 .no-flag{font-size:11px;font-weight:600;padding:2px 7px;border-radius:5px;background:var(--surface-2);color:var(--muted);border:1px solid var(--line);white-space:nowrap}
+.lab-tbl td:not(:nth-child(2)){white-space:nowrap}
 .lab-tbl td:nth-child(2){text-align:left;font-family:var(--body);color:var(--muted);max-width:30ch}
 @media (max-width:1100px){.lab-champ{grid-template-columns:1fr}}
 /* login gate */
@@ -1281,11 +1282,43 @@ function renderLog(out,hz){
 
 // ---------- strategy lab (results computed by pipeline/strategy_lab.py)
 let labChart=null,labBars='day';
+function labTabs(root,weekly,ilTab){
+  return `<div class="bt-tabs" role="tablist" aria-label="Data" style="margin-bottom:10px">
+    ${root?`<button role="tab" data-labbars="day" aria-selected="${labBars==='day'}">Dagsdata · ${root.period.start.slice(0,4)}–${root.period.end.slice(0,4)}</button>`:''}
+    ${weekly?`<button role="tab" data-labbars="week" aria-selected="${labBars==='week'}">Veckodata · ${weekly.period.start.slice(0,4)}–${weekly.period.end.slice(0,4)}</button>`:''}${ilTab}</div>`;
+}
+// intraday rules on the 5-minute archive (pipeline/intraday_lab.py)
+function renderIntraLab(out,IL,root,weekly,ilTab){
+  const pc=v=>v==null?'–':sgn(v,x=>x.toLocaleString('sv-SE',{minimumFractionDigits:3,maximumFractionDigits:3}))+' %';
+  const cls=v=>(v||0)>=0?'pos':'neg',fmtP=p=>Object.entries(p||{}).map(([k,v])=>`${k} ${v}`).join(', ')||'–';
+  const mk=[...new Set(IL.families.flatMap(f=>Object.keys(f.best.by_market||{})))];
+  out.innerHTML=`${labTabs(root,weekly,ilTab)}
+    <div class="kpis">
+      ${kp('Handelsdagar',IL.days,`${IL.from} – ${IL.to}`)}
+      ${kp('Instrument',IL.universe,'aktier, index och valutor')}
+      ${kp('Kontrollperiod',IL.split.slice(5),'från; valet görs på dagarna före')}
+      ${kp('Kostnad',f2(IL.base_cost)+' %','per affär; även 0,03 och 0,15 %')}
+      ${kp('Robusta regler',IL.families.filter(f=>f.robust).length,'av '+IL.families.length,IL.families.some(f=>f.robust)?'pos':'neg')}
+      ${(()=>{const b=IL.families.filter(f=>f.id!=='open_close'&&f.best.test.n).sort((x,y)=>y.best.test.avg-x.best.test.avg)[0];
+        return b?kp('Bäst i kontrollen',pc(b.best.test.avg),esc(b.name)+' · per affär',cls(b.best.test.avg)):''})()}
+    </div>
+    <div class="bt-card" style="margin-top:20px"><h3 class="sec-t"><span>Intradagsregler på arkivet</span><span>kontroll ${IL.split} – ${IL.to}</span></h3>
+      <div class="bt-scroll"><table class="bt-tbl lab-tbl"><thead><tr><th>Regel</th><th>Idé</th><th>Inställning (tränad)</th><th>Affärer</th><th>Vinstandel</th><th>Snitt per affär</th><th>vid 0,03 %</th><th>vid 0,15 %</th><th>t-värde</th>${mk.map(m=>`<th>${esc(m)}</th>`).join('')}<th>Robust</th></tr></thead><tbody>
+      ${IL.families.map(f=>{const b=f.best,t=b.test||{};return `<tr><td style="text-align:left;font-family:var(--body)"><b>${esc(f.name)}</b></td><td>${esc(f.desc)}</td><td>${esc(fmtP(b.params))}</td>
+        <td>${t.n||0}</td><td>${t.n?Math.round(t.win*100)+' %':'–'}</td><td class="${cls(t.avg)}">${pc(t.avg)}</td><td class="${cls(b.by_cost['0.03'])}">${pc(b.by_cost['0.03'])}</td><td class="${cls(b.by_cost['0.15'])}">${pc(b.by_cost['0.15'])}</td>
+        <td>${t.t==null?'–':f1(t.t)}</td>${mk.map(m=>{const x=(b.by_market||{})[m]||{};return `<td class="${cls(x.avg)}">${x.n?pc(x.avg):'–'}</td>`}).join('')}
+        <td>${f.id==='open_close'?'<span class="no-flag">Jämförelse</span>':f.robust?'<span class="ok-flag">Robust</span>':'<span class="no-flag">Nej</span>'}</td></tr>`}).join('')}
+      </tbody></table></div></div>
+    <p class="bt-note">Varje affär öppnas och stängs samma dag: Norden 09:00–17:25, USA 15:30–22:00, valutor 08:00–22:00. Signalen använder bara staplar till och med sin egen stängning, och affären görs på nästa staplens öppning. Stop loss fylls på nivån, eller på öppningen om kursen har gått förbi den. <b>Snitt per affär</b> är efter ${f2(IL.base_cost)} % kostnad och gäller kontrollperioden, alltså dagarna efter att inställningen valdes. Kolumnerna per marknad är också kontrollperioden. <b>Robust</b> kräver minst 100 affärer, positivt snitt både före och i kontrollperioden och ett t-värde över 2 (liten risk att resultatet är slump). Kostnaden avgör mycket: med certifikat (ca 0,15 % spread) krävs en fördel på mer än 0,15 % per affär. Resultaten blir säkrare för varje dag arkivet växer.</p>`;
+}
 function renderLab(){
   const out=document.getElementById('lab-out');
   if(labChart){labChart.remove();labChart=null}
-  const root=REAL&&REAL.lab,weekly=root&&root.weekly;
+  const root=REAL&&REAL.lab,weekly=root&&root.weekly,IL=REAL&&REAL.intralab&&REAL.intralab.families&&REAL.intralab.families.length?REAL.intralab:null;
   if(labBars==='week'&&!weekly)labBars='day';
+  if(labBars==='intra'&&!IL)labBars='day';
+  const ilTab=IL?`<button role="tab" data-labbars="intra" aria-selected="${labBars==='intra'}">Intradag · ${IL.days} dagar</button>`:'';
+  if(labBars==='intra'){renderIntraLab(out,IL,root,weekly,ilTab);return}
   const L=root&&(labBars==='week'?Object.assign({},weekly,{history:root.history}):root);
   if(!L){out.innerHTML='<div class="bt-empty">Strategilabbet har inte körts än, eller så är du inte inloggad. Det körs när dagsdatan uppdateras (17:50 och 22:35) och när sidan publiceras om.</div>';return}
   const pct=v=>v==null?'–':sgn(v)+' %',sh=v=>v==null?'–':f2(v),C=L.champion,B=L.benchmark;
@@ -1296,7 +1329,7 @@ function renderLab(){
   const wTxt=w=>w==null?'':' '+Math.round(w*100)+' %';
   const tabs=weekly?`<div class="bt-tabs" role="tablist" aria-label="Data" style="margin-bottom:10px">
       <button role="tab" data-labbars="day" aria-selected="${labBars==='day'}">Dagsdata · ${root.period.start.slice(0,4)}–${root.period.end.slice(0,4)}</button>
-      <button role="tab" data-labbars="week" aria-selected="${labBars==='week'}">Veckodata · ${weekly.period.start.slice(0,4)}–${weekly.period.end.slice(0,4)}</button></div>`:'';
+      <button role="tab" data-labbars="week" aria-selected="${labBars==='week'}">Veckodata · ${weekly.period.start.slice(0,4)}–${weekly.period.end.slice(0,4)}</button>${ilTab}</div>`:'';
   out.innerHTML=`${tabs}
     <div class="kpis">
       ${kp('Testade varianter',L.configs_tested,`${L.families.length} strategier × parametrar`)}
@@ -1482,7 +1515,7 @@ async function fetchParts(base,auth){
   let dekRaw=null;
   if(auth){dekRaw=await unwrapDek(auth,session);if(!dekRaw)return 'locked'}
   const manifest=await getJSON(base+'manifest.json');
-  const parts=await Promise.all(['intra','hour','daily','log','lab','archive','calib'].map(async p=>{
+  const parts=await Promise.all(['intra','hour','daily','log','lab','archive','calib','intralab'].map(async p=>{
     const hit=partCache[p];if(manifest&&hit&&manifest[p]&&hit.gen===manifest[p])return hit.data;
     let d=null;
     if(auth){const bx=await getJSON(base+p+'.enc.json');if(bx){try{d=JSON.parse(new TextDecoder().decode(await unpack(bx,await openBox(dekRaw,bx))))}catch(e){}}}
@@ -1495,6 +1528,7 @@ async function fetchParts(base,auth){
   const lb=parts[4];if(merged&&lb){merged.lab=lb;merged.parts.lab=lb.generated}
   const ar=parts[5];if(merged&&ar){merged.archive=ar;merged.parts.archive=ar.generated}
   const cb=parts[6];if(merged&&cb){merged.calib=cb;merged.parts.calib=cb.generated}
+  const il=parts[7];if(merged&&il){merged.intralab=il;merged.parts.intralab=il.generated}
   return merged;
 }
 async function loadData(){
