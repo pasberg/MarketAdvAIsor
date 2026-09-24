@@ -1923,6 +1923,9 @@ document.getElementById('jr-form').addEventListener('submit',async e=>{
     // an open position: the sale entered here (kept as entered, also without a time of day)
     if(o.exit!==undefined||o.pnlSEK!==undefined)Object.assign(JR.data.notes[jrEditing.id],{close:o.close,exit:o.exit,pnlSEK:o.pnlSEK});
   }else{
+    if(!jrEditing){const c=jrMatches(o,roundTrips(JR.data.fills));
+      if(c.length===1&&confirm(`Affären finns redan importerad från Avanza (${c[0].name}, ${c[0].open}). Lägg uppgifterna där i stället för att skapa en dublett?`)){
+        JR.data.notes[c[0].id]=jrNoteFrom(o,c[0]);await jrSave();return}}
     const id=jrEditing?jrEditing.id:'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
     const sym=T[o.name.toUpperCase()]?o.name.toUpperCase():null;
     o.und=(o.und||'').toUpperCase();
@@ -1938,6 +1941,34 @@ document.getElementById('jr-del').addEventListener('click',async()=>{
   else{const t=JR.data.trades.find(x=>x.id===jrEditing.id);if(t){t.del=true;t.mod=Date.now()}}
   document.getElementById('jr-dlg').close();await jrSave();
 });
+// ---- a trade entered by hand that an Avanza import also contains: one trade, not two
+const NOTE_KEYS=['setup','source','hz','dir','stop','target','notes','und','sigTime','sigPrice'];
+function jrMatches(m,trips){
+  const d=String(m.open||'').slice(0,10),mn=String(m.name||'').trim().toUpperCase(),mu=String(m.und||'').toUpperCase()||guessUnd(m.name);
+  const near=(a,b,tol)=>a===''||a==null||!b||Math.abs(+a/b-1)<=tol;
+  return trips.filter(t=>t.open===d&&(t.name.toUpperCase()===mn||(mu&&guessUnd(t.name)===mu&&(m.product||'aktie')===t.product))
+    &&(m.qty===''||m.qty==null||Math.abs(+m.qty-t.qty)<=Math.max(1,t.qty*.01))&&near(m.entry,t.entry,.02));
+}
+function jrNoteFrom(m,t){
+  const n=Object.assign({},JR.data.notes[t.id]||{});
+  for(const k of NOTE_KEYS)if(m[k]!=null&&m[k]!==''&&(n[k]==null||n[k]===''))n[k]=m[k];
+  if(String(m.open||'').slice(0,10)===t.open&&/T\d\d:\d\d/.test(m.open||'')&&!/T00:00$/.test(m.open))n.open=n.open||m.open;
+  if(t.close&&String(m.close||'').slice(0,10)===t.close&&!/T00:00$/.test(m.close||''))n.close=n.close||m.close;
+  if(!t.close&&m.close){n.close=n.close||m.close;if(m.exit!=null&&m.exit!=='')n.exit=n.exit||m.exit;if(m.pnlSEK)n.pnlSEK=n.pnlSEK||m.pnlSEK}
+  n.mod=Date.now();return n;
+}
+// after an import: fold the hand-entered copies into the imported trades (only unambiguous matches)
+function jrLinkManual(){
+  const trips=roundTrips(JR.data.fills),used=new Set(Object.keys(JR.data.notes).filter(k=>JR.data.notes[k].linked));let n=0,unclear=0;
+  for(const m of JR.data.trades){
+    if(m.del)continue;
+    const c=jrMatches(m,trips).filter(t=>!used.has(t.id));
+    if(c.length!==1){if(c.length>1)unclear++;continue}
+    JR.data.notes[c[0].id]=Object.assign(jrNoteFrom(m,c[0]),{linked:m.id});used.add(c[0].id);
+    Object.assign(m,{del:true,linkedTo:c[0].id,mod:Date.now()});n++;
+  }
+  return {n,unclear};
+}
 // which accounts to import (remembered for the next import)
 function jrPickAccounts(fills,accts){
   return new Promise(done=>{
@@ -1965,8 +1996,11 @@ document.getElementById('jr-csv').addEventListener('change',async e=>{
     const accts=[...new Set(fills.map(f=>f.acct).filter(Boolean))];
     if(accts.length>1){const keep=await jrPickAccounts(fills,accts);if(!keep)return;fills=fills.filter(f=>keep.has(f.acct))}
     const known=new Set(JR.data.fills.map(f=>f.k)),added=fills.filter(f=>!known.has(f.k));
-    JR.data.fills=JR.data.fills.concat(added);await jrSave();
-    alert(`${fills.length} köp och sälj i filen, ${added.length} nya. ${roundTrips(added).length ? 'Affärerna finns nu i listan — lägg till setup och stop loss med Ändra.' : ''}`);
+    JR.data.fills=JR.data.fills.concat(added);
+    const lk=jrLinkManual();await jrSave();
+    alert(`${fills.length} köp och sälj i filen, ${added.length} nya.`+(lk.n?` ${lk.n} manuellt inlagda affärer fanns redan i exporten och har slagits ihop med de importerade (dina anteckningar följer med).`:'')
+      +(lk.unclear?` ${lk.unclear} manuella affärer liknar flera importerade — kontrollera dem och ta bort dubletten för hand.`:'')
+      +(roundTrips(added).length?' Lägg till setup och stop loss med Ändra.':''));
   }catch(err){alert(err.message)}
 });
 document.getElementById('jr-backup').addEventListener('change',async e=>{
