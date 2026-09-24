@@ -19,6 +19,13 @@ if [[ "$parts" == *daily* ]] || [ ! -f data/lab.json ]; then
   python pipeline/strategy_lab.py --data data || echo "::warning::Strategilabbet misslyckades"
 fi
 
+# intraday archive: after each daily fetch (17:50 and 22:35), keep today's 5-minute bars
+if [[ "$parts" == *daily* ]]; then
+  python pipeline/intraday_archive.py --data data || echo "::warning::Intradagsarkivet misslyckades"
+fi
+# trading journals synced from the page (journal branch) -> encrypted site data
+python pipeline/journal_export.py data/journal.json || echo "::warning::Dagboken kunde inte exporteras"
+
 rm -rf site
 python pipeline/encrypt_data.py --src data --dst site/data
 python pipeline/build_site.py --src mockup/index.html --out site/index.html

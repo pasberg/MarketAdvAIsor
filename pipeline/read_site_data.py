@@ -18,7 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from restore_log import restore  # noqa: E402
 
-PARTS = ("intra", "hour", "daily", "log", "lab")
+PARTS = ("intra", "hour", "daily", "log", "lab", "archive", "journal")
 
 
 def git_show(path: str) -> bytes | None:

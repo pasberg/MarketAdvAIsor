@@ -294,6 +294,29 @@ table.wl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
 .res{font-size:11px;font-weight:600;padding:2px 7px;border-radius:5px;font-family:var(--body)}
 .res.tp{background:var(--up-soft);color:var(--up)} .res.sl{background:var(--down-soft);color:var(--down)} .res.tid{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
 .bt-note{font-size:12px;color:var(--faint);margin-top:14px;max-width:90ch}
+.jr-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:4px}
+.jr-primary{background:var(--ink,#111);color:var(--surface);border-color:transparent}
+.jr-sync{font-size:12px;color:var(--muted);margin-left:auto}
+.jr-sync b{color:var(--up)}
+.jr-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:20px}
+@media (max-width:1100px){.jr-groups{grid-template-columns:1fr}}
+.jr-tbl td.l{text-align:left;font-family:var(--body)}
+.jr-tbl button{font:inherit;font-size:12px;border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:2px 8px;cursor:pointer}
+.jr-small{color:var(--faint);font-size:11px}
+#jr-dlg{border:1px solid var(--line);border-radius:14px;background:var(--surface);color:inherit;padding:20px;width:min(720px,calc(100vw - 32px));max-height:calc(100vh - 32px)}
+#jr-dlg::backdrop{background:rgba(0,0,0,.45)}
+#jr-dlg h3{margin:0 0 4px;font-size:18px}
+.jr-hint{font-size:12px;color:var(--muted);margin:0 0 12px}
+.jr-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.jr-grid .jr-wide{grid-column:1/-1}
+.jr-grid input,.jr-grid select,.jr-grid textarea{font:inherit;font-size:14px;color:inherit;background:var(--bg,transparent);border:1px solid var(--line);border-radius:8px;padding:6px 8px;width:100%;box-sizing:border-box}
+@media (max-width:640px){.jr-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.jr-actions{display:flex;gap:8px;margin-top:16px}
+.jr-del{color:var(--down)}
+.jr-set{margin-top:16px}
+.jr-set summary{cursor:pointer;font-size:13px;font-weight:600}
+.jr-set .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.jr-set input{font:inherit;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:6px 8px;min-width:280px;flex:1;background:transparent;color:inherit}
 .bt-empty{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:20px;color:var(--muted);margin-top:16px}
 @media (max-width:1100px){.bt-grid{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .lab-champ{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:20px;margin-top:4px}
@@ -354,6 +377,7 @@ body.locked .top,body.locked main{filter:blur(7px) saturate(.7);pointer-events:n
       <a href="#bevakning">Bevakning</a>
       <a href="#backtest" data-view="backtest">Backtest</a>
       <a href="#strategilabb" data-view="lab">Strategilabb</a>
+      <a href="#dagbok" data-view="journal">Dagbok</a>
       <a href="#metod" id="nav-metod">Metod</a>
     </nav>
     <div class="top-meta">
@@ -410,6 +434,44 @@ body.locked .top,body.locked main{filter:blur(7px) saturate(.7);pointer-events:n
   </section>
 
   <section class="lab" id="lab" hidden><div id="lab-out"></div></section>
+
+  <section class="jr" id="journal" hidden>
+    <div id="jr-out"></div>
+    <input type="file" id="jr-csv" accept=".csv,text/csv,text/plain" hidden>
+    <input type="file" id="jr-backup" accept=".json,application/json" hidden>
+    <datalist id="jr-syms"></datalist><datalist id="jr-setups"></datalist><datalist id="jr-sources"></datalist>
+    <dialog id="jr-dlg" aria-labelledby="jr-dlg-t">
+      <form id="jr-form" method="dialog">
+        <h3 id="jr-dlg-t">Affär</h3>
+        <p class="jr-hint" id="jr-dlg-hint"></p>
+        <div class="jr-grid">
+          <label class="bt-f jr-wide">Instrument<input name="name" list="jr-syms" required autocomplete="off"></label>
+          <label class="bt-f">Din syn<select name="dir"><option value="L">Lång (uppgång)</option><option value="S">Kort (nedgång)</option></select></label>
+          <label class="bt-f">Produkt<select name="product"><option value="aktie">Aktie / index / valuta</option><option value="certifikat">Bull/bear-certifikat</option><option value="mini">Mini future / turbo</option><option value="warrant">Warrant</option><option value="annat">Annat</option></select></label>
+          <label class="bt-f">Horisont<select name="hz"><option value="intradag">Intradag</option><option value="vecka">Vecka</option><option value="manad">Månad</option><option value="kvartal">Kvartal</option><option value="halvar">Halvår</option><option value="ar">År</option></select></label>
+          <label class="bt-f">Setup<input name="setup" list="jr-setups" autocomplete="off" placeholder="t.ex. VWAP-rekyl"></label>
+          <label class="bt-f">Källa<input name="source" list="jr-sources" autocomplete="off" placeholder="t.ex. MarketMate: namn"></label>
+          <label class="bt-f">Öppnad<input name="open" type="datetime-local" required></label>
+          <label class="bt-f">Stängd<input name="close" type="datetime-local"></label>
+          <label class="bt-f">Antal<input name="qty" type="number" step="any" min="0"></label>
+          <label class="bt-f">Valuta<select name="cur"><option>SEK</option><option>USD</option><option>EUR</option><option>NOK</option><option>DKK</option></select></label>
+          <label class="bt-f">Entry<input name="entry" type="number" step="any"></label>
+          <label class="bt-f">Exit<input name="exit" type="number" step="any"></label>
+          <label class="bt-f">Stop loss (planerad)<input name="stop" type="number" step="any"></label>
+          <label class="bt-f">Mål (planerat)<input name="target" type="number" step="any"></label>
+          <label class="bt-f">Avgifter (kr)<input name="fees" type="number" step="any" min="0"></label>
+          <label class="bt-f">Resultat (kr, valfritt)<input name="pnlSEK" type="number" step="any" placeholder="räknas annars fram"></label>
+          <label class="bt-f jr-wide">Anteckning<textarea name="notes" rows="3" placeholder="Varför gick du in? Följde du planen?"></textarea></label>
+        </div>
+        <div class="jr-actions">
+          <button type="button" class="chip jr-del" id="jr-del">Ta bort</button>
+          <span style="flex:1"></span>
+          <button type="button" class="chip" id="jr-cancel">Avbryt</button>
+          <button type="submit" class="chip jr-primary" value="save">Spara</button>
+        </div>
+      </form>
+    </dialog>
+  </section>
 
   <section class="watch" id="bevakning">
     <h2 class="sec-t"><span>Att hålla koll på</span><span id="wl-count"></span></h2>
@@ -824,7 +886,7 @@ function instruments(m){
 
 // ---------- state
 const state={view:'analys',hz:'intradag',mkt:'all',sel:null,ov:{lv:true,fib:true,ew:true,ema:true,vwap:true,vol:true,rsi:true},cap:250000,riskPct:1,ins:null};
-try{const h=location.hash.slice(1);if(HZ[h])state.hz=h;if(h==='backtest')state.view='backtest';if(h==='strategilabb')state.view='lab'}catch(e){}
+try{const h=location.hash.slice(1);if(HZ[h])state.hz=h;if(h==='backtest')state.view='backtest';if(h==='strategilabb')state.view='lab';if(h==='dagbok')state.view='journal'}catch(e){}
 try{const v=JSON.parse(localStorage.getItem('maa-ui2')||'null');if(v){Object.assign(state.ov,v.ov||{});if(v.cap)state.cap=v.cap;if(v.riskPct)state.riskPct=v.riskPct;if(!HZ[location.hash.slice(1)]&&HZ[v.hz])state.hz=v.hz}}catch(e){}
 const save=()=>{try{localStorage.setItem('maa-ui2',JSON.stringify({ov:state.ov,cap:state.cap,riskPct:state.riskPct,hz:state.hz}))}catch(e){}};
 const inMkt=s=>state.mkt==='all'||T[s][5].split(' ').includes(state.mkt);
@@ -855,12 +917,12 @@ function renderHz(){
   document.getElementById('hz').innerHTML=HZ_ORDER.map(k=>{const H=HZ[k];const tf={intra:'1–5 min',hour:'1 timme',day:'1 dag',week:'1 vecka'}[H.kind];
     return `<button role="tab" id="tab-${k}" aria-selected="${k===state.hz}" data-hz="${k}"><span class="t">${H.t}</span><span class="s">${H.valid} · ${tf}</span></button>`}).join('');
   const H=HZ[state.hz];
-  const bt=state.view==='backtest',lab=state.view==='lab',other=bt||lab;
-  document.getElementById('h1').textContent=lab?'Strategilabb':(bt?'Backtest · ':'Top picks · ')+H.t;
-  document.getElementById('hsub').textContent=lab?'Etablerade strategier testade på samma instrument — med kostnader, kontrollperiod och omval som bara ser bakåt.':bt?'Hade rekommendationerna fungerat? Reglerna för entry, stop loss och mål testade på historisk data.':H.sub;
+  const bt=state.view==='backtest',lab=state.view==='lab',jr=state.view==='journal',other=bt||lab||jr;
+  document.getElementById('h1').textContent=jr?'Handelsdagbok':lab?'Strategilabb':(bt?'Backtest · ':'Top picks · ')+H.t;
+  document.getElementById('hsub').textContent=jr?'Dina egna affärer — vilka setups, källor och tider som faktiskt tjänar pengar åt dig.':lab?'Etablerade strategier testade på samma instrument — med kostnader, kontrollperiod och omval som bara ser bakåt.':bt?'Hade rekommendationerna fungerat? Reglerna för entry, stop loss och mål testade på historisk data.':H.sub;
   document.querySelector('.layout').hidden=other;document.getElementById('bevakning').hidden=other;document.getElementById('metod').hidden=other;
-  document.getElementById('bt').hidden=!bt;document.getElementById('lab').hidden=!lab;
-  document.getElementById('hz').hidden=lab;document.querySelector('.bar2').hidden=lab;
+  document.getElementById('bt').hidden=!bt;document.getElementById('lab').hidden=!lab;document.getElementById('journal').hidden=!jr;
+  document.getElementById('hz').hidden=lab||jr;document.querySelector('.bar2').hidden=lab||jr;
   document.querySelectorAll('.nav a').forEach(a=>{const v=a.dataset.view;if(v&&v===state.view)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
   document.getElementById('regime').innerHTML=H.regime.map(([a,b])=>`<span>${a} <b>${b}</b></span>`).join('');
   const mk=[['all','Alla marknader'],['ndx','Nasdaq'],['spx','S&P 500'],['nord','Norden'],['index','Index'],['ravara','Råvaror'],['fx','Valutor']];
@@ -1109,6 +1171,8 @@ function renderBacktest(){
   document.getElementById('bt-intro').textContent=BTUI.tab==='sim'
     ?'Samma regler som sätter dagens nivåer körs bakåt i tiden, stapel för stapel och bara med den data som fanns då. Varje signal följs tills stop loss, målen eller tidsgränsen nås. ⅓ av positionen säljs vid varje TP.'
     :'Sajtens topp 5-förslag sparas automatiskt vid fasta tider och följs upp mot kurserna efteråt, med samma regler för entry, mål och stop loss som i simuleringen.';
+  const AR=REAL&&REAL.archive;
+  if(AR&&AR.days&&BTUI.tab==='sim')document.getElementById('bt-intro').textContent+=` Intradagsarkivet har ${AR.days} handelsdagar med 5-minutersdata för ${AR.symbols} instrument (${AR.first} – ${AR.last}); simuleringen använder än så länge de senaste fem dagarna.`;
   if(eqChart){eqChart.remove();eqChart=null}
   if(!REAL){out.innerHTML='<div class="bt-empty">Kräver riktig kursdata. Logga in, eller vänta tills kurserna har laddats.</div>';return}
   if(BTUI.tab==='log'){renderLog(out,hz);return}
@@ -1265,6 +1329,7 @@ function render(){
   renderHz();
   if(state.view==='backtest'){renderBacktest();return}
   if(state.view==='lab'){renderLab();return}
+  if(state.view==='journal'){queueMicrotask(renderJournal);return} // after the journal code below has run
   const {tops,watch}=renderPicks();
   let m=null;
   if(state.sel){const list=state.sel.kind==='top'?tops:watch;m=list.find(x=>x.item.s===state.sel.s)||null}
@@ -1281,7 +1346,7 @@ document.addEventListener('click',e=>{
     if(kind==='watch'||window.innerWidth<1100)document.getElementById('detail').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})}
 });
 document.querySelectorAll('.nav a[data-view]').forEach(a=>a.addEventListener('click',e=>{
-  e.preventDefault();state.view=a.dataset.view;try{history.replaceState(null,'','#'+({backtest:'backtest',lab:'strategilabb'}[state.view]||state.hz))}catch(_){}
+  e.preventDefault();state.view=a.dataset.view;try{history.replaceState(null,'','#'+({backtest:'backtest',lab:'strategilabb',journal:'dagbok'}[state.view]||state.hz))}catch(_){}
   render();window.scrollTo({top:0,behavior:'auto'});
 }));
 document.getElementById('nav-metod').addEventListener('click',()=>{if(state.view!=='analys'){state.view='analys';render()}});
@@ -1398,7 +1463,7 @@ async function fetchParts(base,auth){
   let dekRaw=null;
   if(auth){dekRaw=await unwrapDek(auth,session);if(!dekRaw)return 'locked'}
   const manifest=await getJSON(base+'manifest.json');
-  const parts=await Promise.all(['intra','hour','daily','log','lab'].map(async p=>{
+  const parts=await Promise.all(['intra','hour','daily','log','lab','archive'].map(async p=>{
     const hit=partCache[p];if(manifest&&hit&&manifest[p]&&hit.gen===manifest[p])return hit.data;
     let d=null;
     if(auth){const bx=await getJSON(base+p+'.enc.json');if(bx){try{d=JSON.parse(new TextDecoder().decode(await unpack(bx,await openBox(dekRaw,bx))))}catch(e){}}}
@@ -1409,6 +1474,7 @@ async function fetchParts(base,auth){
   const merged=mergeParts(parts)||(auth?null:mergeParts([await getJSON(base+'market.json')]));
   const lg=parts[3];if(merged&&lg){merged.log=lg;merged.parts.log=lg.generated}
   const lb=parts[4];if(merged&&lb){merged.lab=lb;merged.parts.lab=lb.generated}
+  const ar=parts[5];if(merged&&ar){merged.archive=ar;merged.parts.archive=ar.generated}
   return merged;
 }
 async function loadData(){
@@ -1445,6 +1511,303 @@ function applyData(d){
   }
   updateAge();
 }
+// ---------- trading journal (Dagbok)
+// Stored in this browser, encrypted with a key derived from the login (same password = same key on
+// every device). Optional sync: an encrypted copy on the repository's `journal` branch via the
+// GitHub API, with a token the owner enters. Avanza exports are kept as fills; round trips are
+// rebuilt from them on every render, and the owner's notes (setup, stop, source …) are keyed by trade.
+const JR={data:null,key:null,uid:null,token:null,sync:'',syncAt:0,loaded:false,timer:null};
+const JR_BRANCH='journal';
+const jrEmpty=()=>({v:1,trades:[],fills:[],notes:{},updated:null});
+const HZ_NAME={intradag:'Intradag',vecka:'Vecka',manad:'Månad',kvartal:'Kvartal',halvar:'Halvår',ar:'År'};
+const PRODUCT_NAME={aktie:'Aktie / index / valuta',certifikat:'Certifikat',mini:'Mini future',warrant:'Warrant',annat:'Annat'};
+const WD=['sön','mån','tis','ons','tor','fre','lör'];
+const b64big=u=>{u=new Uint8Array(u);let s='';for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s)};
+async function jrDeriveKey(){
+  if(!session||!subtle)return null;
+  const raw=b64d(session.kek),pre=te.encode('marketadvaisor-journal-v1:'),buf=new Uint8Array(pre.length+raw.length);
+  buf.set(pre);buf.set(raw,pre.length);
+  return subtle.importKey('raw',await subtle.digest('SHA-256',buf),'AES-GCM',false,['encrypt','decrypt']);
+}
+async function jrSeal(obj){
+  const plain=te.encode(JSON.stringify(obj));
+  if(!JR.key)return {v:0,plain:JSON.stringify(obj)};
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  return {v:1,iv:b64big(iv),ct:b64big(await subtle.encrypt({name:'AES-GCM',iv},JR.key,plain))};
+}
+async function jrOpen(box){
+  if(!box)return null;
+  if(box.v===0)return JSON.parse(box.plain);
+  return JSON.parse(new TextDecoder().decode(await subtle.decrypt({name:'AES-GCM',iv:b64d(box.iv)},JR.key,b64d(box.ct))));
+}
+const jrLocalKey=()=>'maa-journal-'+(JR.uid||'demo'),jrTokKey=()=>'maa-journal-token-'+(JR.uid||'demo');
+async function jrLoad(){
+  JR.uid=session?session.uid:null;JR.key=await jrDeriveKey();JR.data=jrEmpty();JR.token=null;
+  try{const b=JSON.parse(localStorage.getItem(jrLocalKey())||'null');if(b)JR.data=Object.assign(jrEmpty(),await jrOpen(b))}catch(e){JR.sync='Kunde inte läsa den lokala dagboken'}
+  try{const t=JSON.parse(localStorage.getItem(jrTokKey())||'null');if(t)JR.token=(await jrOpen(t)).token}catch(e){}
+  JR.loaded=true;
+  if(JR.token)jrSync();
+}
+async function jrStore(){try{localStorage.setItem(jrLocalKey(),JSON.stringify(await jrSeal(JR.data)))}catch(e){JR.sync='Kunde inte spara lokalt: '+e.message}}
+async function jrSave(){
+  JR.data.updated=new Date().toISOString();await jrStore();
+  clearTimeout(JR.timer);if(JR.token)JR.timer=setTimeout(jrSync,1500);
+  renderJournal();
+}
+// union of two journals: fills by key, notes and manual trades by last modification
+function jrMerge(a,b){
+  if(!b)return a;
+  const out=jrEmpty(),fk=new Map();
+  for(const f of [...(a.fills||[]),...(b.fills||[])])fk.set(f.k,f);
+  out.fills=[...fk.values()];
+  out.notes=Object.assign({},a.notes);
+  for(const [k,v] of Object.entries(b.notes||{}))if(!out.notes[k]||(v.mod||0)>(out.notes[k].mod||0))out.notes[k]=v;
+  const tk=new Map();
+  for(const t of [...(a.trades||[]),...(b.trades||[])]){const o=tk.get(t.id);if(!o||(t.mod||0)>(o.mod||0))tk.set(t.id,t)}
+  out.trades=[...tk.values()];
+  out.updated=[a.updated,b.updated].filter(Boolean).sort().pop()||null;
+  return out;
+}
+// ---- GitHub sync (contents API on the journal branch)
+function repoSlug(){const h=location.hostname.match(/^([^.]+)\.github\.io$/i),p=location.pathname.split('/').filter(Boolean)[0];return h&&p?`${h[1]}/${p}`:'pasberg/MarketAdvAIsor'}
+const gh=(method,path,body)=>fetch(`https://api.github.com/repos/${repoSlug()}/${path}`,{method,cache:'no-store',
+  headers:{Authorization:'Bearer '+JR.token,Accept:'application/vnd.github+json'},body:body?JSON.stringify(body):undefined});
+async function jrSync(){
+  if(!JR.token||!JR.uid||JR.syncing)return;
+  JR.syncing=true;JR.sync='Synkar…';if(state.view==='journal')renderJournal();
+  const path=`contents/journal/${JR.uid}.enc.json`;
+  try{
+    for(let attempt=0;attempt<2;attempt++){
+      const r=await gh('GET',`${path}?ref=${JR_BRANCH}`);let sha;
+      if(r.status===200){const j=await r.json();sha=j.sha;JR.data=jrMerge(JR.data,await jrOpen(JSON.parse(atob(j.content.replace(/\s/g,'')))))}
+      else if(r.status===401||r.status===403){JR.sync='Token nekades — kontrollera att den har Contents: Read and write för repot';return}
+      else if(r.status!==404){JR.sync='Synk misslyckades ('+r.status+')';return}
+      const put=await gh('PUT',path,{message:'Dagbok '+new Date().toISOString().slice(0,16),branch:JR_BRANCH,
+        content:btoa(JSON.stringify(await jrSeal(JR.data))),...(sha?{sha}:{})});
+      if(put.ok){JR.sync='ok';JR.syncAt=Date.now();await jrStore();return}
+      if(put.status!==409&&put.status!==422||attempt){JR.sync='Synk misslyckades ('+put.status+')';return}
+    }
+  }catch(e){JR.sync='Ingen kontakt med GitHub'}
+  finally{JR.syncing=false;if(state.view==='journal')renderJournal()}
+}
+// ---- Avanza transactions (CSV export) -> fills
+const jrNum=x=>{if(x==null)return NaN;x=String(x).replace(/["\s ]/g,'');if(!x||x==='-')return NaN;return +(x.includes(',')?x.replace(/\./g,'').replace(',','.'):x)};
+function parseAvanza(text){
+  text=text.replace(/^﻿/,'');
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  if(!lines.length)throw new Error('Filen är tom.');
+  const d=lines[0].includes(';')?';':lines[0].includes('\t')?'\t':',';
+  const head=lines[0].split(d).map(h=>h.replace(/"/g,'').trim().toLowerCase());
+  const col=(...n)=>head.findIndex(h=>n.some(x=>h.startsWith(x)));
+  const c={date:col('datum'),type:col('typ'),name:col('värdepapper','vardepapper','beskrivning'),qty:col('antal'),px:col('kurs'),
+    amt:col('belopp'),fee:col('courtage'),tcur:col('transaktionsvaluta'),cur:col('valuta'),icur:col('instrumentvaluta'),isin:col('isin'),acct:col('konto')};
+  if([c.date,c.type,c.name,c.qty,c.px].some(i=>i<0))throw new Error('Känner inte igen filen. Välj transaktionsexporten från Avanza (CSV med kolumnerna Datum, Typ av transaktion, Värdepapper, Antal, Kurs).');
+  const seen={},out=[];
+  lines.slice(1).forEach(line=>{
+    const x=line.split(d).map(v=>v.replace(/^"|"$/g,'').trim()),type=(x[c.type]||'').toLowerCase();
+    const side=/^köp|^kop/.test(type)?'B':/^sälj|^salj/.test(type)?'S':null;
+    if(!side)return;
+    const qty=Math.abs(jrNum(x[c.qty])),px=jrNum(x[c.px]);if(!(qty>0)||!(px>=0))return;
+    const n=seen[line]=(seen[line]||0)+1;
+    const tcur=(c.tcur>=0?x[c.tcur]:c.cur>=0?x[c.cur]:'SEK')||'SEK',amt=jrNum(x[c.amt]);
+    out.push({k:'a'+hash(line).toString(36)+'.'+n,date:(x[c.date]||'').slice(0,10),side,name:x[c.name],qty,px,
+      amt:isNaN(amt)?null:amt*(tcur==='SEK'?1:(FX[tcur]||1)),fee:Math.abs(jrNum(x[c.fee]))||0,
+      cur:(c.icur>=0&&x[c.icur])||(c.cur>=0&&x[c.cur])||'SEK',isin:c.isin>=0?x[c.isin]:'',acct:c.acct>=0?x[c.acct]:'',i:out.length});
+  });
+  return out;
+}
+const guessProduct=n=>/^(bull|bear)\b/i.test(n)?'certifikat':/^(mini|turbo)\b/i.test(n)?'mini':/\b(warrant|put|call)\b/i.test(n)?'warrant':'aktie';
+const guessView=n=>/^bear\b/i.test(n)||/^(mini|turbo)\s*s(hort)?\b/i.test(n)?'S':'L';
+function roundTrips(fills){
+  const by={},out=[],ids={};
+  for(const f of fills)(by[f.name+'|'+f.acct]||(by[f.name+'|'+f.acct]=[])).push(f);
+  for(const fs of Object.values(by)){
+    fs.sort((a,b)=>a.date.localeCompare(b.date)||a.i-b.i);
+    let t=null,pos=0;
+    for(const f of fs){
+      const q=f.side==='B'?f.qty:-f.qty;
+      if(!t){const base='avz|'+f.name+'|'+f.date;ids[base]=(ids[base]||0)+1;
+        t={id:base+'|'+ids[base],src:'avanza',name:f.name,pos:q>0?'L':'S',dir:q>0?guessView(f.name):'S',product:guessProduct(f.name),
+          open:f.date,inQ:0,inV:0,outQ:0,outV:0,amt:0,fees:0,cur:f.cur,n:0,hz:null}}
+      if((q>0)===(t.pos==='L')){t.inQ+=f.qty;t.inV+=f.qty*f.px}else{t.outQ+=f.qty;t.outV+=f.qty*f.px}
+      t.amt+=f.amt||0;t.fees+=f.fee;t.n++;pos+=q;
+      if(Math.abs(pos)<1e-9){t.close=f.date;out.push(t);t=null;pos=0}
+    }
+    if(t)out.push(t);
+  }
+  return out.map(t=>Object.assign(t,{qty:t.inQ,entry:t.inQ?t.inV/t.inQ:null,exit:t.close&&t.outQ?t.outV/t.outQ:null,
+    pnlSEK:t.close?t.amt:null,hz:t.close&&t.open===t.close?'intradag':null}));
+}
+// ---- trades with computed result and R
+function jrTrades(){
+  const d=JR.data,avz=roundTrips(d.fills).map(t=>{const n=d.notes[t.id]||{};const o=Object.assign({},t);
+    for(const k of ['setup','source','hz','dir','stop','target','notes','product'])if(n[k]!=null&&n[k]!=='')o[k]=n[k];return o});
+  const man=d.trades.filter(t=>!t.del).map(t=>Object.assign({src:'manual'},t));
+  return avz.concat(man).map(t=>{
+    const posL=t.src==='avanza'?t.pos==='L':!(t.dir==='S'&&(t.product==='aktie'||t.product==='annat'));
+    const sg=posL?1:-1,num=v=>v===''||v==null||isNaN(+v)?null:+v;
+    const entry=num(t.entry),exit=num(t.exit),stop=num(t.stop),qty=num(t.qty),closed=!!t.close&&(exit!=null||num(t.pnlSEK)!=null);
+    let pnl=num(t.pnlSEK);
+    if(pnl==null&&closed&&entry!=null&&exit!=null&&qty)pnl=sg*(exit-entry)*qty*(FX[t.cur]||1)-(num(t.fees)||0);
+    const r=closed&&stop!=null&&entry!=null&&exit!=null&&entry!==stop?sg*(exit-entry)/Math.abs(entry-stop):null;
+    return Object.assign(t,{entry,exit,stop,qty,pnl,r,closed});
+  }).sort((a,b)=>String(b.close||b.open).localeCompare(String(a.close||a.open)));
+}
+function jrStats(ts){
+  const c=ts.filter(t=>t.closed&&t.pnl!=null).sort((a,b)=>String(a.close).localeCompare(String(b.close)));
+  const n=c.length,win=c.filter(t=>t.pnl>0),loss=c.filter(t=>t.pnl<0),sum=c.reduce((a,t)=>a+t.pnl,0);
+  const rs=c.filter(t=>t.r!=null).map(t=>t.r),gw=win.reduce((a,t)=>a+t.pnl,0),gl=-loss.reduce((a,t)=>a+t.pnl,0);
+  let eq=0,peak=0,dd=0;for(const t of c){eq+=t.pnl;peak=Math.max(peak,eq);dd=Math.min(dd,eq-peak)}
+  return {n,win:win.length,sum,avg:n?sum/n:null,avgR:rs.length?rs.reduce((a,x)=>a+x,0)/rs.length:null,nR:rs.length,
+    pf:gl?gw/gl:null,avgWin:win.length?gw/win.length:null,avgLoss:loss.length?-gl/loss.length:null,dd,closed:c};
+}
+const kr=v=>v==null?'–':sgn(v,x=>nf0.format(x))+' kr';
+const pctOf=(a,n)=>n?Math.round(a/n*100)+' %':'–';
+function jrGroup(title,ts,keyFn){
+  const g={};for(const t of ts){if(!t.closed||t.pnl==null)continue;const k=keyFn(t)||'—';(g[k]||(g[k]=[])).push(t)}
+  const rows=Object.entries(g).map(([k,v])=>[k,jrStats(v)]).sort((a,b)=>b[1].n-a[1].n);
+  if(!rows.length)return '';
+  return `<div class="bt-card"><h3 class="sec-t" style="padding:14px 16px 0"><span>${title}</span><span>stängda affärer</span></h3><div class="bt-scroll"><table class="bt-tbl jr-tbl"><thead><tr><th>${title.replace(/^Per /,'')}</th><th>Affärer</th><th>Vinstandel</th><th>Snitt-R</th><th>Förväntan</th><th>Resultat</th></tr></thead><tbody>
+    ${rows.map(([k,s])=>`<tr><td class="l">${esc(k)}${s.n<20?' <span class="jr-small">litet underlag</span>':''}</td><td>${s.n}</td><td>${pctOf(s.win,s.n)}</td><td>${s.avgR==null?'–':sgn(s.avgR,f2)+'R'}</td><td class="${(s.avg||0)>=0?'pos':'neg'}">${kr(s.avg)}</td><td class="${s.sum>=0?'pos':'neg'}">${kr(s.sum)}</td></tr>`).join('')}
+  </tbody></table></div></div>`;
+}
+let jrChart=null;
+async function renderJournal(){
+  const out=document.getElementById('jr-out');
+  if(!JR.loaded||JR.uid!==(session?session.uid:null)){out.innerHTML='<div class="bt-empty">Laddar dagboken…</div>';JR.loaded=false;await jrLoad()}
+  if(jrChart){jrChart.remove();jrChart=null}
+  const ts=jrTrades(),S=jrStats(ts),open=ts.filter(t=>!t.closed).length;
+  const syncTxt=!JR.uid?'Ej inloggad — sparas bara i den här webbläsaren, okrypterat':
+    !JR.token?'Sparas krypterat i den här webbläsaren':JR.sync==='ok'?`<b>Synkad</b> ${new Date(JR.syncAt).toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'})} · krypterad kopia på GitHub`:esc(JR.sync||'Synk väntar');
+  const hourOf=t=>/T\d\d/.test(t.open||'')?t.open.slice(11,13)+':00':null;
+  const dow=t=>{const d=new Date(String(t.open).slice(0,10)+'T12:00:00Z');return isNaN(d)?null:WD[d.getUTCDay()]};
+  out.innerHTML=`
+    <div class="jr-bar">
+      <button class="chip jr-primary" data-jr="new">+ Ny affär</button>
+      <button class="chip" data-jr="csv">Importera från Avanza (CSV)</button>
+      <button class="chip" data-jr="export">Spara säkerhetskopia</button>
+      <button class="chip" data-jr="import">Läs in säkerhetskopia</button>
+      <span class="jr-sync" id="jr-sync">${syncTxt}</span>
+    </div>
+    ${ts.length?`<div class="kpis">
+      ${kp('Stängda affärer',S.n,`${open} öppna · ${S.nR} med stop loss`)}
+      ${kp('Vinstandel',pctOf(S.win,S.n),`snittvinst ${kr(S.avgWin)} · snittförlust ${kr(S.avgLoss)}`)}
+      ${kp('Resultat',kr(S.sum),'efter avgifter',S.sum>=0?'pos':'neg')}
+      ${kp('Förväntan per affär',kr(S.avg),S.avgR==null?'ange stop loss för R':`snitt ${sgn(S.avgR,f2)}R`,(S.avg||0)>=0?'pos':'neg')}
+      ${kp('Vinstfaktor',S.pf==null?'–':f2(S.pf),'vinster / förluster',(S.pf||0)>=1?'pos':'neg')}
+      ${kp('Största nedgång',kr(S.dd),'från topp till botten','neg')}
+    </div>
+    ${S.n>=2?`<div class="bt-card" style="margin-top:20px"><h3 class="sec-t" style="padding:14px 16px 0"><span>Resultat över tid</span><span>kronor, efter avgifter</span></h3><div class="eq" id="jr-eq"></div></div>`:''}
+    <div class="jr-groups">
+      ${jrGroup('Per setup',ts,t=>t.setup||'(inget setup angivet)')}
+      ${jrGroup('Per källa',ts,t=>t.source||'(ingen källa angiven)')}
+      ${jrGroup('Per horisont',ts,t=>HZ_NAME[t.hz]||'(ej angiven)')}
+      ${jrGroup('Per riktning och produkt',ts,t=>(t.dir==='S'?'Kort':'Lång')+' · '+(PRODUCT_NAME[t.product]||t.product))}
+      ${jrGroup('Per veckodag',ts,dow)}
+      ${jrGroup('Per öppningstimme',ts.filter(hourOf),hourOf)}
+    </div>
+    <div class="bt-card" style="margin-top:20px"><h3 class="sec-t" style="padding:14px 16px 0"><span>Affärer</span><span>${ts.length} st · klicka Ändra för setup, stop loss och källa</span></h3>
+      <div class="bt-scroll"><table class="bt-tbl jr-tbl"><thead><tr><th>Öppnad</th><th>Stängd</th><th>Instrument</th><th>Syn</th><th>Setup</th><th>Källa</th><th>Entry</th><th>Exit</th><th>Stop</th><th>R</th><th>Resultat</th><th></th></tr></thead><tbody>
+      ${ts.map(t=>`<tr><td>${esc(String(t.open||'').replace('T',' '))}</td><td>${t.close?esc(String(t.close).replace('T',' ')):'<span class="jr-small">öppen</span>'}</td>
+        <td class="l">${esc(t.name)}${t.src==='avanza'?' <span class="jr-small">Avanza</span>':''}</td><td><span class="dir ${t.dir==='S'?'S':'L'}">${t.dir==='S'?'KORT':'LÅNG'}</span></td>
+        <td class="l">${esc(t.setup||'')}</td><td class="l">${esc(t.source||'')}</td><td>${t.entry==null?'–':fp(t.entry)}</td><td>${t.exit==null?'–':fp(t.exit)}</td><td>${t.stop==null?'–':fp(t.stop)}</td>
+        <td>${t.r==null?'–':sgn(t.r,f2)}</td><td class="${(t.pnl||0)>=0?'pos':'neg'}">${kr(t.pnl)}</td><td><button data-jr-edit="${esc(t.id)}">Ändra</button></td></tr>`).join('')}
+      </tbody></table></div></div>`
+    :`<div class="bt-empty">Dagboken är tom. Lägg till en affär, eller importera dina transaktioner från Avanza: logga in på avanza.se, gå till <b>Min ekonomi → Transaktioner</b>, välj period och exportera som CSV. Köp och sälj paras ihop till affärer automatiskt; lägg sedan till setup, stop loss och källa på varje affär.</div>`}
+    <details class="jr-set bt-card" style="padding:14px 16px"><summary>Synkronisering mellan enheter</summary>
+      <p class="bt-note" style="margin-top:8px">Dagboken sparas krypterad i webbläsaren. För att se den på flera enheter kan en krypterad kopia sparas i repots gren <code>journal</code>. Skapa en <i>fine-grained personal access token</i> på GitHub (Settings → Developer settings) med åtkomst bara till repot ${esc(repoSlug())} och behörigheten <b>Contents: Read and write</b>, och klistra in den här — på varje enhet. Token sparas krypterad i webbläsaren. Innehållet kan bara läsas med ditt lösenord, och sajtens publicering gör det läsbart för sajtens konton (så att Claude kan hjälpa dig tolka det).</p>
+      <div class="row"><input id="jr-token" type="password" autocomplete="off" placeholder="${JR.token?'Token sparad — klistra in en ny för att byta':'github_pat_…'}"><button class="chip" data-jr="token">Spara token</button>${JR.token?'<button class="chip" data-jr="sync">Synka nu</button><button class="chip jr-del" data-jr="untoken">Ta bort token</button>':''}</div>
+    </details>
+    <p class="bt-note">Resultatet för Avanza-affärer är summan av beloppen i exporten (inklusive courtage och växling). R kräver en planerad stop loss: R = (exit − entry) / (entry − stop). Dra inga slutsatser av ett setup förrän det har minst 20–30 affärer.</p>`;
+  const el=document.getElementById('jr-eq'),LW=window.LightweightCharts;
+  if(el&&LW){
+    const Cv=n=>cssVar('--'+n),pts=new Map();let eq=0;
+    for(const t of S.closed){eq+=t.pnl;const d=Math.floor(Date.parse(String(t.close).slice(0,10)+'T00:00:00Z')/1000);if(!isNaN(d))pts.set(d,eq)}
+    jrChart=LW.createChart(el,{autoSize:true,layout:{background:{type:'solid',color:Cv('surface')},textColor:Cv('muted'),fontFamily:'JetBrains Mono, monospace',fontSize:11,attributionLogo:true},
+      grid:{vertLines:{visible:false},horzLines:{color:Cv('line-2')}},rightPriceScale:{borderColor:Cv('line')},timeScale:{borderColor:Cv('line')},
+      localization:{locale:'sv-SE',priceFormatter:v=>nf0.format(v)+' kr'}});
+    jrChart.addSeries(LW.BaselineSeries,{baseValue:{type:'price',price:0},priceLineVisible:false,
+      topLineColor:Cv('up'),bottomLineColor:Cv('down'),topFillColor1:Cv('up-soft'),topFillColor2:'transparent',bottomFillColor1:'transparent',bottomFillColor2:Cv('down-soft')})
+      .setData([...pts].sort((a,b)=>a[0]-b[0]).map(([time,value])=>({time,value})));
+    jrChart.timeScale().fitContent();
+  }
+}
+// ---- form
+function jrFill(){
+  document.getElementById('jr-syms').innerHTML=Object.entries(T).map(([s,t])=>`<option value="${esc(s)}">${esc(t[0])}</option>`).join('');
+  const setups=new Set(['ORB-utbrott','VWAP-rekyl','Gap-and-go','Gap-fyllnad','Trendfortsättning','Rekyl till stöd','Utbrott','Fibonacci-rekyl','Nyhetsaffär']);
+  HZ_ORDER.forEach(h=>D[h]&&D[h].top.forEach(r=>setups.add(r[3])));
+  for(const t of JR.data.trades)if(t.setup)setups.add(t.setup);for(const n of Object.values(JR.data.notes))if(n.setup)setups.add(n.setup);
+  document.getElementById('jr-setups').innerHTML=[...setups].map(x=>`<option value="${esc(x)}">`).join('');
+  const src=new Set(['Egen analys','MarketAdvAIsor-förslag','MarketMate: ']);
+  for(const t of JR.data.trades)if(t.source)src.add(t.source);for(const n of Object.values(JR.data.notes))if(n.source)src.add(n.source);
+  document.getElementById('jr-sources').innerHTML=[...src].map(x=>`<option value="${esc(x)}">`).join('');
+}
+let jrEditing=null;
+function jrOpenForm(id){
+  jrFill();
+  const f=document.getElementById('jr-form'),t=id?jrTrades().find(x=>x.id===id):null,avz=t&&t.src==='avanza';
+  jrEditing=t?{id:t.id,src:t.src}:null;
+  f.reset();
+  const now=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);
+  const v=t||{dir:'L',product:'aktie',hz:state.hz,open:now,cur:'SEK'};
+  for(const el of f.elements){if(!el.name)continue;const x=v[el.name];el.value=x==null?'':el.type==='datetime-local'&&/^\d{4}-\d\d-\d\d$/.test(x)?x+'T00:00':x;
+    el.disabled=avz&&['name','open','close','qty','entry','exit','fees','pnlSEK','cur'].includes(el.name)}
+  document.getElementById('jr-dlg-t').textContent=t?'Ändra affär':'Ny affär';
+  document.getElementById('jr-dlg-hint').textContent=avz?'Importerad från Avanza: priser och resultat kommer från exporten. Lägg till setup, källa, horisont och planerad stop loss.':'Priser anges för det du handlade (för ett certifikat: certifikatets kurs). Lämna Stängd och Exit tomma för en öppen affär.';
+  document.getElementById('jr-del').hidden=!t;
+  document.getElementById('jr-dlg').showModal();
+}
+document.getElementById('jr-form').addEventListener('submit',async e=>{
+  const f=e.target,o={};for(const el of f.elements)if(el.name&&!el.disabled)o[el.name]=el.value.trim();
+  if(jrEditing&&jrEditing.src==='avanza'){
+    JR.data.notes[jrEditing.id]={setup:o.setup,source:o.source,hz:o.hz,dir:o.dir,product:o.product,stop:o.stop,target:o.target,notes:o.notes,mod:Date.now()};
+  }else{
+    const id=jrEditing?jrEditing.id:'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+    const sym=T[o.name.toUpperCase()]?o.name.toUpperCase():null;
+    JR.data.trades=JR.data.trades.filter(t=>t.id!==id).concat([Object.assign(o,{id,sym,mod:Date.now()})]);
+  }
+  await jrSave();
+});
+document.getElementById('jr-cancel').addEventListener('click',()=>document.getElementById('jr-dlg').close());
+document.getElementById('jr-del').addEventListener('click',async()=>{
+  if(!jrEditing||!confirm('Ta bort affären ur dagboken?'))return;
+  if(jrEditing.src==='avanza'){const fills=roundTrips(JR.data.fills);const t=fills.find(x=>x.id===jrEditing.id);
+    if(t){const keys=new Set(JR.data.fills.filter(f=>f.name===t.name&&f.date>=t.open&&(!t.close||f.date<=t.close)).map(f=>f.k));JR.data.fills=JR.data.fills.filter(f=>!keys.has(f.k))}}
+  else{const t=JR.data.trades.find(x=>x.id===jrEditing.id);if(t){t.del=true;t.mod=Date.now()}}
+  document.getElementById('jr-dlg').close();await jrSave();
+});
+const readText=file=>new Promise((ok,bad)=>{const r=new FileReader();r.onload=()=>ok(r.result);r.onerror=()=>bad(r.error);r.readAsText(file,'utf-8')});
+document.getElementById('jr-csv').addEventListener('change',async e=>{
+  const file=e.target.files[0];e.target.value='';if(!file)return;
+  try{
+    let text=await readText(file);if(text.includes('�'))text=await new Promise(ok=>{const r=new FileReader();r.onload=()=>ok(r.result);r.readAsText(file,'windows-1252')});
+    const fills=parseAvanza(text),known=new Set(JR.data.fills.map(f=>f.k)),added=fills.filter(f=>!known.has(f.k));
+    JR.data.fills=JR.data.fills.concat(added);await jrSave();
+    alert(`${fills.length} köp och sälj i filen, ${added.length} nya. ${roundTrips(added).length ? 'Affärerna finns nu i listan — lägg till setup och stop loss med Ändra.' : ''}`);
+  }catch(err){alert(err.message)}
+});
+document.getElementById('jr-backup').addEventListener('change',async e=>{
+  const file=e.target.files[0];e.target.value='';if(!file)return;
+  try{const d=JSON.parse(await readText(file));if(!d||!Array.isArray(d.trades)||!Array.isArray(d.fills))throw new Error('Inte en säkerhetskopia av dagboken.');
+    JR.data=jrMerge(JR.data,d);await jrSave();alert('Säkerhetskopian är inläst och sammanslagen med dagboken.')}catch(err){alert(err.message)}
+});
+document.getElementById('journal').addEventListener('click',async e=>{
+  const ed=e.target.closest('[data-jr-edit]');if(ed){jrOpenForm(ed.dataset.jrEdit);return}
+  const b=e.target.closest('[data-jr]');if(!b)return;
+  const a=b.dataset.jr;
+  if(a==='new')jrOpenForm(null);
+  else if(a==='csv')document.getElementById('jr-csv').click();
+  else if(a==='import')document.getElementById('jr-backup').click();
+  else if(a==='export'){const url=URL.createObjectURL(new Blob([JSON.stringify(JR.data,null,1)],{type:'application/json'}));
+    const l=document.createElement('a');l.href=url;l.download=`dagbok-${new Date().toISOString().slice(0,10)}.json`;l.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
+  else if(a==='token'){const v=document.getElementById('jr-token').value.trim();if(!v)return;
+    if(!JR.uid){alert('Logga in först — token och dagbok krypteras med ditt lösenord.');return}
+    JR.token=v;localStorage.setItem(jrTokKey(),JSON.stringify(await jrSeal({token:v})));await jrSync()}
+  else if(a==='sync')jrSync();
+  else if(a==='untoken'){JR.token=null;localStorage.removeItem(jrTokKey());JR.sync='';renderJournal()}
+});
+
 loadData();
 // Re-check for new data every 5 minutes while the page is visible; keep the age label current.
 setInterval(()=>{updateAge();if(document.visibilityState==='visible'&&Date.now()-loadedAt>5*60*1000)loadData()},30*1000);
