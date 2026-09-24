@@ -64,9 +64,9 @@ function duePlans(log, local) {
 
 function logPicks(cases, symbols, log, plan, local) {
   const busy = new Set(log.entries.filter(e => e.hz === plan.hz && (e.status === 'pending' || e.status === 'open')).map(e => e.sym));
-  let cands = MAA.pool(cases, plan.hz).top.map(it => MAA.liveAnalysis(symbols, it, plan.hz)).filter(m => m && m.valid);
+  let cands = MAA.pool(cases, plan.hz, symbols).top.map(it => MAA.liveAnalysis(symbols, it, plan.hz)).filter(m => m && m.valid);
   if (plan.todayOnly) cands = cands.filter(m => MAA.dayOf(m.c[m.N - 1].time) === local.epochDay); // market open today
-  const top = cands.sort((a, b) => b.score - a.score).slice(0, 5);
+  const top = MAA.bestPerSymbol(cands).sort((a, b) => b.score - a.score).slice(0, 5);
   let n = 0;
   top.forEach((m, i) => {
     if (busy.has(m.item.s)) return;

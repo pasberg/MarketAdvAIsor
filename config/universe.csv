@@ -1,0 +1,173 @@
+sym,name,yahoo,currency,exchange,kind,tags,avanza_id,avanza_name
+NVDA,NVIDIA,NVDA,USD,Nasdaq,stock,ndx spx,4478,NVIDIA
+MSFT,Microsoft,MSFT,USD,Nasdaq,stock,ndx spx,3873,MICROSOFT
+AAPL,Apple,AAPL,USD,Nasdaq,stock,ndx spx,3323,APPLE
+AMZN,Amazon,AMZN,USD,Nasdaq,stock,ndx spx,3986,AMAZON
+META,Meta Platforms,META,USD,Nasdaq,stock,ndx spx,350795,META
+AVGO,Broadcom,AVGO,USD,Nasdaq,stock,ndx spx,369636,BROADCOM
+AMD,Advanced Micro Devices,AMD,USD,Nasdaq,stock,ndx spx,529720,AMD
+GOOGL,Alphabet A,GOOGL,USD,Nasdaq,stock,ndx spx,472095,ALPHABET
+TSLA,Tesla,TSLA,USD,Nasdaq,stock,ndx spx,238449,TESLA
+COST,Costco,COST,USD,Nasdaq,stock,ndx spx,3378,COSTCO
+NFLX,Netflix,NFLX,USD,Nasdaq,stock,ndx spx,185896,NETFLIX
+PLTR,Palantir,PLTR,USD,Nasdaq,stock,ndx spx,,PALANTIR
+ADBE,Adobe,ADBE,USD,Nasdaq,stock,ndx spx,,ADOBE
+CSCO,Cisco,CSCO,USD,Nasdaq,stock,ndx spx,,CISCO
+PEP,PepsiCo,PEP,USD,Nasdaq,stock,ndx spx,,PEPSICO
+QCOM,Qualcomm,QCOM,USD,Nasdaq,stock,ndx spx,,QUALCOMM
+INTU,Intuit,INTU,USD,Nasdaq,stock,ndx spx,,INTUIT
+TXN,Texas Instruments,TXN,USD,Nasdaq,stock,ndx spx,,TEXAS
+AMGN,Amgen,AMGN,USD,Nasdaq,stock,ndx spx,,AMGEN
+ISRG,Intuitive Surgical,ISRG,USD,Nasdaq,stock,ndx spx,,INTUITIVE
+BKNG,Booking Holdings,BKNG,USD,Nasdaq,stock,ndx spx,,BOOKING
+MU,Micron,MU,USD,Nasdaq,stock,ndx spx,,MICRON
+AMAT,Applied Materials,AMAT,USD,Nasdaq,stock,ndx spx,,APPLIED
+LRCX,Lam Research,LRCX,USD,Nasdaq,stock,ndx spx,,LAM
+PANW,Palo Alto Networks,PANW,USD,Nasdaq,stock,ndx spx,,PALO ALTO
+ADP,ADP,ADP,USD,Nasdaq,stock,ndx spx,,ADP
+CMCSA,Comcast,CMCSA,USD,Nasdaq,stock,ndx spx,,COMCAST
+GILD,Gilead Sciences,GILD,USD,Nasdaq,stock,ndx spx,,GILEAD
+SBUX,Starbucks,SBUX,USD,Nasdaq,stock,ndx spx,,STARBUCKS
+MELI,MercadoLibre,MELI,USD,Nasdaq,stock,ndx,,MERCADOLIBRE
+ABNB,Airbnb,ABNB,USD,Nasdaq,stock,ndx spx,,AIRBNB
+CRWD,CrowdStrike,CRWD,USD,Nasdaq,stock,ndx spx,,CROWDSTRIKE
+INTC,Intel,INTC,USD,Nasdaq,stock,ndx spx,,INTEL
+WMT,Walmart,WMT,USD,Nasdaq,stock,ndx spx,,WALMART
+JPM,JPMorgan Chase,JPM,USD,NYSE,stock,spx,3574,JPMORGAN
+LLY,Eli Lilly,LLY,USD,NYSE,stock,spx,4026,LILLY
+XOM,Exxon Mobil,XOM,USD,NYSE,stock,spx,4013,EXXON
+CAT,Caterpillar,CAT,USD,NYSE,stock,spx,4124,CATERPILLAR
+UNH,UnitedHealth,UNH,USD,NYSE,stock,spx,4323,UNITEDHEALTH
+V,Visa,V,USD,NYSE,stock,spx,29747,VISA
+MA,Mastercard,MA,USD,NYSE,stock,spx,,MASTERCARD
+BRK-B,Berkshire Hathaway B,BRK-B,USD,NYSE,stock,spx,,BERKSHIRE
+JNJ,Johnson & Johnson,JNJ,USD,NYSE,stock,spx,,JOHNSON
+PG,Procter & Gamble,PG,USD,NYSE,stock,spx,,PROCTER
+HD,Home Depot,HD,USD,NYSE,stock,spx,,HOME DEPOT
+BAC,Bank of America,BAC,USD,NYSE,stock,spx,,BANK OF AMERICA
+ORCL,Oracle,ORCL,USD,NYSE,stock,spx,,ORACLE
+CRM,Salesforce,CRM,USD,NYSE,stock,spx,,SALESFORCE
+KO,Coca-Cola,KO,USD,NYSE,stock,spx,,COCA-COLA
+MRK,Merck,MRK,USD,NYSE,stock,spx,,MERCK
+ABBV,AbbVie,ABBV,USD,NYSE,stock,spx,,ABBVIE
+CVX,Chevron,CVX,USD,NYSE,stock,spx,,CHEVRON
+GE,GE Aerospace,GE,USD,NYSE,stock,spx,,GE
+IBM,IBM,IBM,USD,NYSE,stock,spx,,IBM
+DIS,Walt Disney,DIS,USD,NYSE,stock,spx,,DISNEY
+GS,Goldman Sachs,GS,USD,NYSE,stock,spx,,GOLDMAN
+MS,Morgan Stanley,MS,USD,NYSE,stock,spx,,MORGAN STANLEY
+NKE,Nike,NKE,USD,NYSE,stock,spx,,NIKE
+UBER,Uber,UBER,USD,NYSE,stock,spx,,UBER
+BA,Boeing,BA,USD,NYSE,stock,spx,,BOEING
+MCD,McDonald's,MCD,USD,NYSE,stock,spx,,MCDONALDS
+PFE,Pfizer,PFE,USD,NYSE,stock,spx,,PFIZER
+T,AT&T,T,USD,NYSE,stock,spx,,AT&T
+VOLV-B,Volvo B,VOLV-B.ST,SEK,Stockholm,stock,nord,5269,VOLVO
+ATCO-A,Atlas Copco A,ATCO-A.ST,SEK,Stockholm,stock,nord,5234,ATLAS
+ERIC-B,Ericsson B,ERIC-B.ST,SEK,Stockholm,stock,nord,5240,ERICSSON
+SAAB-B,Saab B,SAAB-B.ST,SEK,Stockholm,stock,nord,5401,SAAB
+INVE-B,Investor B,INVE-B.ST,SEK,Stockholm,stock,nord,5247,INVESTOR
+SEB-A,SEB A,SEB-A.ST,SEK,Stockholm,stock,nord,5255,SEB
+ASSA-B,Assa Abloy B,ASSA-B.ST,SEK,Stockholm,stock,nord,5271,ASSA
+SAND,Sandvik,SAND.ST,SEK,Stockholm,stock,nord,5471,SANDVIK
+HM-B,H&M B,HM-B.ST,SEK,Stockholm,stock,nord,5364,HM
+EVO,Evolution,EVO.ST,SEK,Stockholm,stock,nord,549768,EVOLUTION
+ABB,ABB,ABB.ST,SEK,Stockholm,stock,nord,5447,ABB
+NDA-SE,Nordea,NDA-SE.ST,SEK,Stockholm,stock,nord,5249,NORDEA
+ALFA,Alfa Laval,ALFA.ST,SEK,Stockholm,stock,nord,,ALFA LAVAL
+AZN,AstraZeneca,AZN.ST,SEK,Stockholm,stock,nord,,ASTRAZENECA
+BOL,Boliden,BOL.ST,SEK,Stockholm,stock,nord,,BOLIDEN
+ESSITY-B,Essity B,ESSITY-B.ST,SEK,Stockholm,stock,nord,,ESSITY
+GETI-B,Getinge B,GETI-B.ST,SEK,Stockholm,stock,nord,,GETINGE
+HEXA-B,Hexagon B,HEXA-B.ST,SEK,Stockholm,stock,nord,,HEXAGON
+NIBE-B,NIBE B,NIBE-B.ST,SEK,Stockholm,stock,nord,,NIBE
+SCA-B,SCA B,SCA-B.ST,SEK,Stockholm,stock,nord,,SCA
+SHB-A,Handelsbanken A,SHB-A.ST,SEK,Stockholm,stock,nord,,HANDELSBANKEN
+SKF-B,SKF B,SKF-B.ST,SEK,Stockholm,stock,nord,,SKF
+SWED-A,Swedbank A,SWED-A.ST,SEK,Stockholm,stock,nord,,SWEDBANK
+TEL2-B,Tele2 B,TEL2-B.ST,SEK,Stockholm,stock,nord,,TELE2
+TELIA,Telia Company,TELIA.ST,SEK,Stockholm,stock,nord,,TELIA
+EPI-A,Epiroc A,EPI-A.ST,SEK,Stockholm,stock,nord,,EPIROC
+ELUX-B,Electrolux B,ELUX-B.ST,SEK,Stockholm,stock,nord,,ELECTROLUX
+KINV-B,Kinnevik B,KINV-B.ST,SEK,Stockholm,stock,nord,,KINNEVIK
+INDU-C,Industrivärden C,INDU-C.ST,SEK,Stockholm,stock,nord,,INDUSTRIVÄRDEN
+LUND-B,Lundbergföretagen B,LUND-B.ST,SEK,Stockholm,stock,nord,,LUNDBERG
+LATO-B,Latour B,LATO-B.ST,SEK,Stockholm,stock,nord,,LATOUR
+SSAB-A,SSAB A,SSAB-A.ST,SEK,Stockholm,stock,nord,,SSAB
+SINCH,Sinch,SINCH.ST,SEK,Stockholm,stock,nord,,SINCH
+EQT,EQT,EQT.ST,SEK,Stockholm,stock,nord,,EQT
+HUSQ-B,Husqvarna B,HUSQ-B.ST,SEK,Stockholm,stock,nord,,HUSQVARNA
+TREL-B,Trelleborg B,TREL-B.ST,SEK,Stockholm,stock,nord,,TRELLEBORG
+AAK,AAK,AAK.ST,SEK,Stockholm,stock,nord,,AAK
+AXFO,Axfood,AXFO.ST,SEK,Stockholm,stock,nord,,AXFOOD
+CAST,Castellum,CAST.ST,SEK,Stockholm,stock,nord,,CASTELLUM
+BALD-B,Balder B,BALD-B.ST,SEK,Stockholm,stock,nord,,BALDER
+HOLM-B,Holmen B,HOLM-B.ST,SEK,Stockholm,stock,nord,,HOLMEN
+INDT,Indutrade,INDT.ST,SEK,Stockholm,stock,nord,,INDUTRADE
+LIFCO-B,Lifco B,LIFCO-B.ST,SEK,Stockholm,stock,nord,,LIFCO
+ADDT-B,Addtech B,ADDT-B.ST,SEK,Stockholm,stock,nord,,ADDTECH
+BEIJ-B,Beijer Ref B,BEIJ-B.ST,SEK,Stockholm,stock,nord,,BEIJER REF
+SECU-B,Securitas B,SECU-B.ST,SEK,Stockholm,stock,nord,,SECURITAS
+SOBI,Sobi,SOBI.ST,SEK,Stockholm,stock,nord,,SOBI
+SAVE,Nordnet,SAVE.ST,SEK,Stockholm,stock,nord,,NORDNET
+AZA,Avanza Bank,AZA.ST,SEK,Stockholm,stock,nord,,AVANZA
+EMBRAC-B,Embracer B,EMBRAC-B.ST,SEK,Stockholm,stock,nord,,EMBRACER
+NOVO-B,Novo Nordisk B,NOVO-B.CO,DKK,Köpenhamn,stock,nord,52300,NOVO
+DSV,DSV,DSV.CO,DKK,Köpenhamn,stock,nord,52415,DSV
+VWS,Vestas Wind,VWS.CO,DKK,Köpenhamn,stock,nord,52332,VESTAS
+MAERSK-B,A.P. Møller-Mærsk B,MAERSK-B.CO,DKK,Köpenhamn,stock,nord,,MAERSK
+CARL-B,Carlsberg B,CARL-B.CO,DKK,Köpenhamn,stock,nord,,CARLSBERG
+ORSTED,Ørsted,ORSTED.CO,DKK,Köpenhamn,stock,nord,,ORSTED
+DANSKE,Danske Bank,DANSKE.CO,DKK,Köpenhamn,stock,nord,,DANSKE
+COLO-B,Coloplast B,COLO-B.CO,DKK,Köpenhamn,stock,nord,,COLOPLAST
+GMAB,Genmab,GMAB.CO,DKK,Köpenhamn,stock,nord,,GENMAB
+PNDORA,Pandora,PNDORA.CO,DKK,Köpenhamn,stock,nord,,PANDORA
+NSIS-B,Novonesis B,NSIS-B.CO,DKK,Köpenhamn,stock,nord,,NOVONESIS
+DEMANT,Demant,DEMANT.CO,DKK,Köpenhamn,stock,nord,,DEMANT
+GN,GN Store Nord,GN.CO,DKK,Köpenhamn,stock,nord,,GN
+TRYG,Tryg,TRYG.CO,DKK,Köpenhamn,stock,nord,,TRYG
+ROCK-B,Rockwool B,ROCK-B.CO,DKK,Köpenhamn,stock,nord,,ROCKWOOL
+AMBU-B,Ambu B,AMBU-B.CO,DKK,Köpenhamn,stock,nord,,AMBU
+EQNR,Equinor,EQNR.OL,NOK,Oslo,stock,nord,52626,EQUINOR
+MOWI,Mowi,MOWI.OL,NOK,Oslo,stock,nord,52507,MOWI
+DNB,DNB Bank,DNB.OL,NOK,Oslo,stock,nord,,DNB
+TEL,Telenor,TEL.OL,NOK,Oslo,stock,nord,,TELENOR
+NHY,Norsk Hydro,NHY.OL,NOK,Oslo,stock,nord,,HYDRO
+ORK,Orkla,ORK.OL,NOK,Oslo,stock,nord,,ORKLA
+YAR,Yara International,YAR.OL,NOK,Oslo,stock,nord,,YARA
+AKRBP,Aker BP,AKRBP.OL,NOK,Oslo,stock,nord,,AKER BP
+SALM,SalMar,SALM.OL,NOK,Oslo,stock,nord,,SALMAR
+GJF,Gjensidige,GJF.OL,NOK,Oslo,stock,nord,,GJENSIDIGE
+KOG,Kongsberg Gruppen,KOG.OL,NOK,Oslo,stock,nord,,KONGSBERG
+STB,Storebrand,STB.OL,NOK,Oslo,stock,nord,,STOREBRAND
+SUBC,Subsea7,SUBC.OL,NOK,Oslo,stock,nord,,SUBSEA
+FRO,Frontline,FRO.OL,NOK,Oslo,stock,nord,,FRONTLINE
+TOM,Tomra,TOM.OL,NOK,Oslo,stock,nord,,TOMRA
+AKER,Aker,AKER.OL,NOK,Oslo,stock,nord,,AKER
+NESTE,Neste,NESTE.HE,EUR,Helsingfors,stock,nord,52859,NESTE
+KNEBV,Kone,KNEBV.HE,EUR,Helsingfors,stock,nord,52862,KONE
+NOKIA,Nokia,NOKIA.HE,EUR,Helsingfors,stock,nord,52784,NOKIA
+SAMPO,Sampo,SAMPO.HE,EUR,Helsingfors,stock,nord,,SAMPO
+UPM,UPM-Kymmene,UPM.HE,EUR,Helsingfors,stock,nord,,UPM
+STERV,Stora Enso R,STERV.HE,EUR,Helsingfors,stock,nord,,STORA ENSO
+FORTUM,Fortum,FORTUM.HE,EUR,Helsingfors,stock,nord,,FORTUM
+WRT1V,Wärtsilä,WRT1V.HE,EUR,Helsingfors,stock,nord,,WÄRTSILÄ
+KESKOB,Kesko B,KESKOB.HE,EUR,Helsingfors,stock,nord,,KESKO
+ELISA,Elisa,ELISA.HE,EUR,Helsingfors,stock,nord,,ELISA
+OUT1V,Outokumpu,OUT1V.HE,EUR,Helsingfors,stock,nord,,OUTOKUMPU
+METSO,Metso,METSO.HE,EUR,Helsingfors,stock,nord,,METSO
+ORNBV,Orion B,ORNBV.HE,EUR,Helsingfors,stock,nord,,ORION
+HUH1V,Huhtamäki,HUH1V.HE,EUR,Helsingfors,stock,nord,,HUHTAMÄKI
+OMXS30,OMX Stockholm 30,^OMX,SEK,Index Sthlm,index,nord index,19002,OMX
+SPX,S&P 500,^GSPC,USD,Index USA,index,spx index,19004,SP500
+NDX100,Nasdaq 100,^NDX,USD,Index USA,index,ndx index,155541,NASDAQ
+GOLD,Guld,GC=F,USD,Råvara,commodity,ravara,,GULD
+SILVER,Silver,SI=F,USD,Råvara,commodity,ravara,,SILVER
+COPPER,Koppar,HG=F,USD,Råvara,commodity,ravara,,KOPPAR
+BRENT,Olja (Brent),BZ=F,USD,Råvara,commodity,ravara,,OLJA
+EURUSD,EUR/USD,EURUSD=X,USD,Valuta,fx,fx,,EURUSD
+USDSEK,USD/SEK,USDSEK=X,SEK,Valuta,fx,fx,,USDSEK
+EURSEK,EUR/SEK,EURSEK=X,SEK,Valuta,fx,fx,,EURSEK
+USDJPY,USD/JPY,USDJPY=X,JPY,Valuta,fx,fx,,USDJPY
+GBPUSD,GBP/USD,GBPUSD=X,USD,Valuta,fx,fx,,GBPUSD
+USDNOK,USD/NOK,USDNOK=X,NOK,Valuta,fx,fx,,USDNOK

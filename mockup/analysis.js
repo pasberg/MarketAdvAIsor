@@ -82,10 +82,27 @@
     const score = Math.round(sc.reduce((a, v, i) => a + v * WEIGHTS[hz][i], 0));
     const prob = Math.max(30, Math.min(78, Math.round(35 + (score - 50) * .9))), ev = (prob / 100) * rr[1] - (1 - prob / 100);
     const gap = curU - eU, status = item.kind !== 'watch' ? null : Math.abs(gap) < .06 ? 'near' : gap > .15 ? 'wait' : 'build';
+    const it = Object.assign({}, item, { ret: pick.r });
+    if (item.auto) Object.assign(it, describe({ s, P, A, B, curU, ret: pick.r, entry: lv.entry, e20, e50, rsiNow, macdUp, sym: item.s }));
     return {
-      item: Object.assign({}, item, { ret: pick.r }), s, P, R, val, c, ...ind, lv, rr, score, prob, ev, risk, eU, hz, N, sc,
+      item: it, s, P, R, val, c, ...ind, lv, rr, score, prob, ev, risk, eU, hz, N, sc,
       curU, rsiNow, e20Now: e20, e50Now: e50, vwapNow: ind.vwap[N - 1], macdUp, status: status || item.status, A, B, startI, endI,
       valid: s * (P - lv.sl) > 0, // false: the price has already passed the stop loss
+    };
+  }
+
+  // Setup, thesis and risk text for an automatic candidate (no hand-written case), from the numbers alone.
+  const RET_TXT = { 0.382: '38,2 %', 0.5: '50 %', 0.618: '61,8 %' };
+  function describe(x) {
+    const fmt = v => v.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: Math.abs(v) < 20 ? 4 : 2 });
+    const L = x.s > 0, withTrend = (x.e20 > x.e50) === L, pct = RET_TXT[x.ret];
+    const rel = v => (x.P > v ? 'över' : 'under');
+    return {
+      setup: `${pct}-rekyl ${withTrend ? (L ? 'i upptrend' : 'i nedtrend') : 'mot trenden'}`,
+      text: `Automatiskt urval. Impulsen ${fmt(x.A)} → ${fmt(x.B)} har rekylerat ${Math.round((1 - x.curU) * 100)} %; entry vid ${pct}-nivån ${fmt(x.entry)}. ` +
+        `Priset ligger ${rel(x.e20)} EMA 20 och ${rel(x.e50)} EMA 50, RSI ${x.rsiNow}, MACD ${x.macdUp ? 'över' : 'under'} signallinjen. ` +
+        `Det finns inget manuellt case för ${x.sym}, så fundamental-, Elliott- och sentimentpoängen är neutrala (50).`,
+      risk: 'Automatiskt förslag utan manuell granskning — kontrollera nyheter, rapportdatum och spread innan du handlar.',
     };
   }
 
@@ -97,14 +114,34 @@
     return analyzeCandles(toCandles(ser, ser.c.length - n, ser.c.length), item, hz);
   }
   // Case rows -> items. cases[hz] = {top: [[sym, dir, ret, setup, text, scores, risk]], watch: [[..., status]]}
-  function pool(cases, hz) {
+  // With symbols (the price data), every other instrument with enough data for the horizon is added
+  // as an automatic candidate, once long and once short, with neutral scores for what only a case can
+  // judge (fundamentals, Elliott waves, sentiment).
+  const NEUTRAL = [50, 50, 50, 50, 50, 50];
+  function pool(cases, hz, symbols) {
     const d = cases[hz];
     const mk = (a, kind) => ({ s: a[0], dir: a[1], ret: a[2], setup: a[3], text: a[4], sc: a[5], risk: kind === 'top' ? a[6] : null, status: kind === 'watch' ? a[6] : null, kind });
-    return { top: d.top.map(a => mk(a, 'top')), watch: d.watch.map(a => mk(a, 'watch')) };
+    const top = d.top.map(a => mk(a, 'top')), watch = d.watch.map(a => mk(a, 'watch'));
+    if (symbols) {
+      const cased = new Set(top.map(x => x.s));
+      for (const [s, x] of Object.entries(symbols)) {
+        const ser = x.series && x.series[SERIES[hz]];
+        if (cased.has(s) || !ser || ser.c.length < 30) continue;
+        for (const dir of ['L', 'S']) top.push({ s, dir, ret: 0.5, setup: '', text: '', sc: NEUTRAL, risk: null, status: null, kind: 'top', auto: true });
+      }
+    }
+    return { top, watch };
+  }
+  // one analysis per instrument: the direction with the higher score
+  function bestPerSymbol(ms) {
+    const by = new Map();
+    for (const m of ms) { const b = by.get(m.item.s); if (!b || m.score > b.score) by.set(m.item.s, m); }
+    return [...by.values()];
   }
   // The recommendations as the page shows them (all markets): best 5 top candidates by score.
   function topPicks(cases, symbols, hz, n = 5) {
-    return pool(cases, hz).top.map(it => liveAnalysis(symbols, it, hz)).filter(m => m && m.valid).sort((a, b) => b.score - a.score).slice(0, n);
+    const ms = pool(cases, hz, symbols).top.map(it => liveAnalysis(symbols, it, hz)).filter(m => m && m.valid);
+    return bestPerSymbol(ms).sort((a, b) => b.score - a.score).slice(0, n);
   }
 
   // Follow one trade plan from signal bar t. cfg: {E, K, session}; opts: {tp: 'swing'|'r', trail}.
@@ -171,7 +208,7 @@
   // cost in R for a trade: % of position round trip, relative to the planned risk
   const costR = (trade, pct) => pct / 100 * trade.entry / trade.risk;
 
-  const api = { HZ_ORDER, WEIGHTS, SERIES, WINDOW, BT, EVAL, VARIANTS, COST, dayOf, ema, toCandles, indicators, analyzeCandles, liveAnalysis, pool, topPicks, simulateTrade, backtest, costR };
+  const api = { HZ_ORDER, WEIGHTS, SERIES, WINDOW, BT, EVAL, VARIANTS, COST, dayOf, ema, toCandles, indicators, analyzeCandles, describe, liveAnalysis, pool, bestPerSymbol, topPicks, simulateTrade, backtest, costR };
   root.MAA = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

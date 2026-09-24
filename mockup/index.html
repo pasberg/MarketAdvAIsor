@@ -552,7 +552,8 @@ const SIG_KEY=['TA','FA','EW','MOM','FIB','SENT'];
 // exchange: session in minutes CET [open, close]; US intraday includes pre-market
 const EX={'Index USA':{o:930,c:1320,us:1},'Index Sthlm':{o:540,c:1050},'Råvara':{o:480,c:1320},
   Nasdaq:{o:930,c:1320,tv:'NASDAQ',us:1},NYSE:{o:930,c:1320,tv:'NYSE',us:1},Stockholm:{o:540,c:1050,tv:'OMXSTO'},
-  'Köpenhamn':{o:540,c:1020,tv:'OMXCOP'},Oslo:{o:540,c:980,tv:'OSL'},Helsingfors:{o:540,c:1050,tv:'OMXHEX'}};
+  'Köpenhamn':{o:540,c:1020,tv:'OMXCOP'},Oslo:{o:540,c:980,tv:'OSL'},Helsingfors:{o:540,c:1050,tv:'OMXHEX'},
+  Valuta:{o:480,c:1320,tv:'FX'}}; // currencies: the intraday day is 08:00–22:00, positions closed by 22:00
 const NOW_MIN=950; // 15:50 CET
 // sym: [name, exchange, currency, price, dayChg%, tags, marketwatch path, country]
 const T={
@@ -588,7 +589,25 @@ const XI={OMXS30:{k:'index',tv:'OMXSTO-OMXS30',mw:'index/omxs30?countrycode=se'}
   SILVER:{k:'commodity',tv:'TVC-SILVER',mw:'future/si00'},COPPER:{k:'commodity',tv:'COMEX-HG1!',mw:'future/hg00'},
   BRENT:{k:'commodity',tv:'TVC-UKOIL',mw:'future/brn00'}};
 const kindOf=s=>(XI[s]&&XI[s].k)||'stock';
-const FX={SEK:1,USD:9.40,DKK:1.47,NOK:.93,EUR:11.0};
+const FX={SEK:1,USD:9.40,DKK:1.47,NOK:.93,EUR:11.0,JPY:.064,GBP:12.6}; // SEK per unit; replaced by live rates when loaded
+const COUNTRY={Stockholm:'se','Köpenhamn':'dk',Oslo:'no',Helsingfors:'fi'};
+// instruments from the data that the page has no built-in entry for (config/universe.csv -> intra.json meta)
+function addMeta(meta,symbols){
+  for(const [sym,u] of Object.entries(meta||{})){
+    const x=symbols[sym]||{},cur=x.currency||(T[sym]&&T[sym][2])||'SEK';
+    if(!T[sym])T[sym]=[u.name,u.exchange,cur,x.last||0,0,u.tags||'',sym.toLowerCase().replace('-','.'),COUNTRY[u.exchange]];
+    if(!AVZ[sym])AVZ[sym]=[u.avanza_id||null,u.avanza_name||u.name.toUpperCase()];
+    if(u.kind==='fx'&&!XI[sym])XI[sym]={k:'fx',tv:'FX-'+sym,mw:'currency/'+sym.toLowerCase()};
+    if(!EX[T[sym][1]])EX[T[sym][1]]={o:540,c:1050};
+  }
+  // live currency rates for position sizing in SEK
+  const last=s=>symbols[s]&&symbols[s].last;
+  if(last('USDSEK'))FX.USD=last('USDSEK');
+  if(last('EURSEK')){FX.EUR=last('EURSEK');FX.DKK=FX.EUR/7.46}
+  if(last('USDSEK')&&last('USDNOK'))FX.NOK=FX.USD/last('USDNOK');
+  if(last('USDSEK')&&last('USDJPY'))FX.JPY=FX.USD/last('USDJPY');
+  if(last('USDSEK')&&last('GBPUSD'))FX.GBP=FX.USD*last('GBPUSD');
+}
 // Avanza: [orderbook id (verified via avanza.se), name used in Avanza's product names]
 const AVZ={NVDA:[4478,'NVIDIA'],MSFT:[3873,'MICROSOFT'],AAPL:[3323,'APPLE'],AMZN:[3986,'AMAZON'],META:[350795,'META'],AVGO:[369636,'BROADCOM'],
   AMD:[529720,'AMD'],GOOGL:[472095,'ALPHABET'],TSLA:[238449,'TESLA'],COST:[3378,'COSTCO'],NFLX:[185896,'NETFLIX'],JPM:[3574,'JPMORGAN'],
@@ -601,10 +620,10 @@ const AVZ={NVDA:[4478,'NVIDIA'],MSFT:[3873,'MICROSOFT'],AAPL:[3323,'APPLE'],AMZN
 const AVZ_BASE='https://www.avanza.se';
 const avzStock=s=>{const [id,nm]=AVZ[s],k=kindOf(s);
   if(k==='index')return `${AVZ_BASE}/index/om-indexet.html/${id}`;
-  if(k==='commodity')return `${AVZ_BASE}/borshandlade-produkter/certifikat-torg/lista.html?name=${encodeURIComponent(nm)}&directions=LONG&sortField=LEVERAGE&sortOrder=ASCENDING`;
+  if(k==='commodity'||k==='fx')return `${AVZ_BASE}/borshandlade-produkter/certifikat-torg/lista.html?name=${encodeURIComponent(nm)}&directions=LONG&sortField=LEVERAGE&sortOrder=ASCENDING`;
   return id?`${AVZ_BASE}/aktier/om-aktien.html/${id}`:`${AVZ_BASE}/sok.html?query=${encodeURIComponent(T[s][0])}`};
 // what "the underlying without leverage" means per kind
-const baseName=s=>({index:`${T[s][0]} (index)`,commodity:`${T[s][0]} utan hävstång`}[kindOf(s)]||`${T[s][0]} (aktien)`);
+const baseName=s=>({index:`${T[s][0]} (index)`,commodity:`${T[s][0]} utan hävstång`,fx:`${T[s][0]} utan hävstång`}[kindOf(s)]||`${T[s][0]} (aktien)`);
 const avzDir=L=>L?'LONG':'SHORT';
 const avzCert=(s,L)=>`${AVZ_BASE}/borshandlade-produkter/certifikat-torg/lista.html?name=${encodeURIComponent(AVZ[s][1])}&directions=${avzDir(L)}&sortField=LEVERAGE&sortOrder=DESCENDING`;
 const avzMini=(s,L)=>`${AVZ_BASE}/borshandlade-produkter/warranter-torg/lista.html?name=${encodeURIComponent(AVZ[s][1])}&warrantTypes=MINI_FUTURE&directions=${avzDir(L)}&sortField=TOTAL_VALUE_TRADED&sortOrder=DESCENDING`;
@@ -631,6 +650,9 @@ const nf2=new Intl.NumberFormat('sv-SE',{minimumFractionDigits:2,maximumFraction
 const nf1=new Intl.NumberFormat('sv-SE',{minimumFractionDigits:1,maximumFractionDigits:1});
 const nf0=new Intl.NumberFormat('sv-SE',{maximumFractionDigits:0});
 const f2=v=>nf2.format(v), f1=v=>nf1.format(v);
+// prices: up to 4 decimals below 20 (currencies like EUR/USD 1,1734, low-priced shares), else 2
+const nf4=new Intl.NumberFormat('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:4});
+const fp=v=>Math.abs(v)<20?nf4.format(v):nf2.format(v);
 const sgn=(v,fmt=f1)=>(v>0?'+':v<0?'−':'')+fmt(Math.abs(v));
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function hash(s){let h=2166136261;for(const c of s){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0}
@@ -671,7 +693,7 @@ function timeline(hz,s,N,fwd){
 const cache={};
 const ema=MAA.ema,toCandles=MAA.toCandles;
 function model(item,hz){
-  const key=hz+'|'+item.s+'|'+item.kind;
+  const key=hz+'|'+item.s+'|'+item.kind+'|'+item.dir;
   if(cache[key])return cache[key];
   return cache[key]=realModel(item,hz)||synthModel(item,hz,key);
 }
@@ -734,7 +756,8 @@ function realModel(item,hz){
   const marks=[{i:m.startI,above:s<0,text:s>0?'Låg':'Topp'},{i:m.endI,above:s>0,text:s>0?'Topp':'Låg'}];
   return Object.assign(m,{t:T[item.s],tl:{t:times,fwd:H.fwd},marks,projLabel:'Mål',real:true});
 }
-const pool=hz=>MAA.pool(D,hz);
+// case rows plus automatic candidates for every instrument in the data the page can show
+const pool=hz=>{const sy=REAL&&REAL.symbols,known={};if(sy)for(const k in sy)if(T[k])known[k]=sy[k];return MAA.pool(D,hz,sy?known:null)};
 function signals(m){
   const {item,s,lv,t,hz,P}=m,L=s>0,sc=m.sc,cur=t[2],intra=hz==='intradag';
   const rel=(v)=>P>v?'över':'under';
@@ -747,12 +770,12 @@ function signals(m){
       :(L?'Svag vinsttrend — caset vilar på tekniken.':'Negativa revideringar och fallande marginaler.');
   const macd=m.real?(m.macdUp?'över signallinjen':'under signallinjen'):sc[3]>=70?(L?'korsar upp':'korsar ned'):'planar ut';
   return [
-    {txt:taTxt,ind:[`EMA20 ${f2(m.e20Now)}`,`EMA50 ${f2(m.e50Now)}`].concat(intra?[`VWAP ${f2(m.vwapNow)}`]:[]).concat([`Volym ${sc[0]>=75?'↑':'→'}`])},
+    {txt:taTxt,ind:[`EMA20 ${fp(m.e20Now)}`,`EMA50 ${fp(m.e50Now)}`].concat(intra?[`VWAP ${fp(m.vwapNow)}`]:[]).concat([`Volym ${sc[0]>=75?'↑':'→'}`])},
     {txt:faTxt,ind:intra?['—']:['Revideringar','P/E vs historik','Marginal']},
-    m.real?{txt:`Impuls ${f2(m.A)} → ${f2(m.B)}; priset har rekylerat ${Math.round((1-m.curU)*100)} %. Mål vid förlängning: ${f2(lv.tp2)}–${f2(lv.tp3)} ${cur}. Vågräkningen är inte automatiserad än — poängen kommer från caset.`,ind:[`Rekyl ${Math.round((1-m.curU)*100)} %`,`Start ${f2(m.A)}`]}
-    :{txt:`Våg 4 pågår. Mål för våg 5: ${f2(lv.tp2)}–${f2(lv.tp3)} ${cur}. Ogiltig ${L?'under':'över'} våg 1 (${f2(lv.w1)}).`,ind:['Våg 4 av 5',`Inval. ${f2(lv.w1)}`]},
+    m.real?{txt:`Impuls ${fp(m.A)} → ${fp(m.B)}; priset har rekylerat ${Math.round((1-m.curU)*100)} %. Mål vid förlängning: ${fp(lv.tp2)}–${fp(lv.tp3)} ${cur}. Vågräkningen är inte automatiserad än — poängen kommer från caset.`,ind:[`Rekyl ${Math.round((1-m.curU)*100)} %`,`Start ${fp(m.A)}`]}
+    :{txt:`Våg 4 pågår. Mål för våg 5: ${fp(lv.tp2)}–${fp(lv.tp3)} ${cur}. Ogiltig ${L?'under':'över'} våg 1 (${fp(lv.w1)}).`,ind:['Våg 4 av 5',`Inval. ${fp(lv.w1)}`]},
     {txt:`RSI ${m.rsiNow<35?'nära översålt':m.rsiNow>65?'nära överköpt':'i neutral zon'} efter rekylen; MACD ${macd}. Momentum ${sc[3]>=75?'stöder':'stöder delvis'} riktningen.`,ind:[`RSI14 ${m.rsiNow}`,`MACD ${macd}`,`RS mot index ${sc[3]>=75?'↑':'→'}`]},
-    {txt:`Entry vid ${pctTxt(item.ret)}-retracement. TP2/TP3 vid 127,2 / 161,8 %-extension.`,ind:[`${pctTxt(item.ret)} ${f2(lv.entry)}`,`127,2 % ${f2(lv.tp2)}`]},
+    {txt:`Entry vid ${pctTxt(item.ret)}-retracement. TP2/TP3 vid 127,2 / 161,8 %-extension.`,ind:[`${pctTxt(item.ret)} ${fp(lv.entry)}`,`127,2 % ${fp(lv.tp2)}`]},
     {txt:sc[5]>=74?(L?'Positivt optionsflöde; blankningen minskar.':'Put-flödet ökar; insiders är nettosäljare.'):sc[5]>=62?'Neutralt sentiment; inga extrema positioneringar.':'Svagt intresse — låg volym i optioner.',ind:[`P/C ${L?(sc[5]>=74?'0,62':'0,85'):'1,24'}`]}
   ];
 }
@@ -763,15 +786,15 @@ function instruments(m){
   const eff=lev=>({tp:lev*tp2,sl:-lev*sl});
   const mini=(K,label)=>{const finD=Math.max(m.risk*1.6,e*K),fin=e-(L?1:-1)*finD,lev=Math.round(e/finD*10)/10,ko=fin+(L?1:-1)*finD*.08;
     return {id:'mini'+label,lev,name:`Mini ${L?'long':'short'} ${nm} · ≈ ×${f1(lev)}`,
-      crit:[`Finansieringsnivå ${L?'≤':'≥'} ${f2(fin)} ${cur}`,`Stop loss-nivå (knock-out) ${L?'under':'över'} ${f2(ko)} — bortom din SL ${f2(m.lv.sl)}`,'Välj den mest omsatta'],
+      crit:[`Finansieringsnivå ${L?'≤':'≥'} ${fp(fin)} ${cur}`,`Stop loss-nivå (knock-out) ${L?'under':'över'} ${fp(ko)} — bortom din SL ${fp(m.lv.sl)}`,'Välj den mest omsatta'],
       link:{href:avzMini(sym,L),label:`Mini ${L?'long':'short'} på ${nm} hos Avanza`},...eff(lev)}};
   const cert=(lev,label)=>({id:'cert'+lev,lev,name:`${L?'Bull':'Bear'} ${nm} ×${lev}`,
       crit:[`Daglig hävstång ×${lev}`,'Spread under 0,3 %','Emittent med marknadsgarant hela dagen'],
       link:{href:avzCert(sym,L),label:`${L?'Bull':'Bear'}-certifikat på ${nm} hos Avanza (högst hävstång först)`},...eff(lev),sub:label});
   const kind=kindOf(sym);
   const stock={id:'stock',lev:1,name:baseName(sym),
-    crit:kind==='commodity'?['Tracker-certifikat eller ETC med hävstång ×1','Låg förvaltningsavgift']:kind==='index'?['Indexfond, ETF eller tracker ×1']:[],
-    link:{href:avzStock(sym),label:kind==='commodity'?`${T[sym][0]}-produkter utan hävstång hos Avanza`:kind==='index'?`${T[sym][0]} hos Avanza`:`${T[sym][0]} hos Avanza`},...eff(1)};
+    crit:kind==='commodity'||kind==='fx'?['Tracker-certifikat eller ETC med hävstång ×1','Låg förvaltningsavgift']:kind==='index'?['Indexfond, ETF eller tracker ×1']:[],
+    link:{href:avzStock(sym),label:kind==='commodity'||kind==='fx'?`${T[sym][0]}-produkter utan hävstång hos Avanza`:kind==='index'?`${T[sym][0]} hos Avanza`:`${T[sym][0]} hos Avanza`},...eff(1)};
   const warr={id:'warr',lev:3,name:`${L?'Köp':'Sälj'}warrant ${nm}, lång löptid`,crit:['Löptid minst 12 månader','Delta runt 0,6','Lösenpris nära dagens kurs'],
       link:{href:avzWarr(sym),label:`Warranter på ${nm} hos Avanza`},...eff(3)};
   const T_=(x,tag,txt)=>Object.assign({},x,{tag,txt});
@@ -840,14 +863,14 @@ function renderHz(){
   document.getElementById('hz').hidden=lab;document.querySelector('.bar2').hidden=lab;
   document.querySelectorAll('.nav a').forEach(a=>{const v=a.dataset.view;if(v&&v===state.view)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
   document.getElementById('regime').innerHTML=H.regime.map(([a,b])=>`<span>${a} <b>${b}</b></span>`).join('');
-  const mk=[['all','Alla marknader'],['ndx','Nasdaq'],['spx','S&P 500'],['nord','Norden'],['index','Index'],['ravara','Råvaror']];
+  const mk=[['all','Alla marknader'],['ndx','Nasdaq'],['spx','S&P 500'],['nord','Norden'],['index','Index'],['ravara','Råvaror'],['fx','Valutor']];
   document.getElementById('mk').innerHTML=mk.map(([k,l])=>`<button class="chip" aria-pressed="${state.mkt===k}" data-mkt="${k}">${l}</button>`).join('');
 }
 function renderPicks(){
   const p=pool(state.hz),intra=state.hz==='intradag';
   // setups where the price already passed the stop loss go last (they are no longer valid)
-  const tops=p.top.map(it=>model(it,state.hz)).sort((a,b)=>((b.valid!==false)-(a.valid!==false))||b.score-a.score);
-  const ranked=tops.filter(m=>inMkt(m.item.s)),shown=ranked.slice(0,5),extra=ranked.slice(5);
+  const tops=MAA.bestPerSymbol(p.top.map(it=>model(it,state.hz))).sort((a,b)=>((b.valid!==false)-(a.valid!==false))||b.score-a.score);
+  const ranked=tops.filter(m=>inMkt(m.item.s)),shown=ranked.slice(0,5),extra=ranked.slice(5,15);
   document.getElementById('pk-count').textContent=`Bästa ${shown.length} av ${ranked.length} kandidater`;
   const el=document.getElementById('picks');
   if(!shown.length){el.innerHTML='<div class="empty">Inga top picks i vald marknad på den här horisonten. Se listan <a href="#bevakning">Att hålla koll på</a> nedan.</div>'}
@@ -867,7 +890,7 @@ function renderPicks(){
       <td><b class="num">${esc(m.item.s)}</b> <span style="color:var(--muted)">${esc(m.t[0])}</span> <a class="wl-avz" href="${avzStock(m.item.s)}" target="_blank" rel="noopener" aria-label="${esc(m.t[0])} hos Avanza">Avanza ↗</a></td>
       <td><span class="dir ${m.item.dir}">${m.item.dir==='L'?'LÅNG':'KORT'}</span></td>
       <td>${esc(m.item.setup)}</td>
-      <td class="r num">${f2(m.P)}</td><td class="r num">${f2(m.lv.entry)}</td>
+      <td class="r num">${fp(m.P)}</td><td class="r num">${fp(m.lv.entry)}</td>
       <td class="r num">${sgn(dist)} %</td><td class="r num">${m.score}</td>
       <td><span class="st ${m.status||'alt'}">${STATUS[m.status||'alt']}</span></td>
       <td class="nt">${esc(m.item.text)}</td></tr>`}).join(''):`<tr><td colspan="9" style="color:var(--muted)">Inga bevakningar i vald marknad.</td></tr>`;
@@ -892,11 +915,11 @@ function drawChart(m){
     rightPriceScale:{borderColor:C('line')},
     timeScale:{borderColor:C('line'),timeVisible:k==='intra'||k==='hour',secondsVisible:false,rightOffset:4},
     crosshair:{mode:0},
-    localization:{locale:'sv-SE',priceFormatter:p=>f2(p)}});
+    localization:{locale:'sv-SE',priceFormatter:p=>fp(p)}});
   const lv=m.lv,up=C('up'),dn=C('down');
   const extra=ov.lv?[lv.sl,lv.tp1,lv.tp2,lv.tp3]:[];
   const cs=chart.addSeries(LW.CandlestickSeries,{upColor:up,downColor:dn,borderUpColor:up,borderDownColor:dn,wickUpColor:up,wickDownColor:dn,
-    priceFormat:{type:'price',precision:2,minMove:.01},
+    priceFormat:Math.abs(m.P)<20?{type:'price',precision:4,minMove:.0001}:{type:'price',precision:2,minMove:.01},
     autoscaleInfoProvider:orig=>{const r=orig();if(r&&r.priceRange&&extra.length){r.priceRange.minValue=Math.min(r.priceRange.minValue,...extra);r.priceRange.maxValue=Math.max(r.priceRange.maxValue,...extra)}return r}});
   cs.setData(m.c.map(({time,open,high,low,close})=>({time,open,high,low,close})));
   cs.priceScale().applyOptions({scaleMargins:{top:.08,bottom:ov.vol?.2:.06}});
@@ -939,9 +962,9 @@ function drawChart(m){
   const idxOf={};m.c.forEach((x,i)=>idxOf[x.time]=i);
   const fmtT=t=>{const d=new Date(t*1000),dd=d.getUTCDate()+' '+['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'][d.getUTCMonth()];return (k==='intra'||k==='hour')?dd+' '+hm(d.getUTCHours()*60+d.getUTCMinutes()):dd+' '+d.getUTCFullYear()};
   const setLg=i=>{const x=m.c[i];if(!x)return;
-    lg.innerHTML=`<span><b>${esc(m.item.s)}</b> · ${tfLabel(m.hz,m.item.s)} · ${fmtT(x.time)}</span><span>Ö <b>${f2(x.open)}</b> H <b>${f2(x.high)}</b> L <b>${f2(x.low)}</b> S <b>${f2(x.close)}</b></span>`+
-      (ov.ema?`<span style="color:${C('ema20')}">EMA20 ${f2(m.e20[i])}</span><span style="color:${C('ema50')}">EMA50 ${f2(m.e50[i])}</span>`:'')+
-      (intra&&ov.vwap?`<span style="color:${C('vwap')}">VWAP ${f2(m.vwap[i])}</span>`:'')+
+    lg.innerHTML=`<span><b>${esc(m.item.s)}</b> · ${tfLabel(m.hz,m.item.s)} · ${fmtT(x.time)}</span><span>Ö <b>${fp(x.open)}</b> H <b>${fp(x.high)}</b> L <b>${fp(x.low)}</b> S <b>${fp(x.close)}</b></span>`+
+      (ov.ema?`<span style="color:${C('ema20')}">EMA20 ${fp(m.e20[i])}</span><span style="color:${C('ema50')}">EMA50 ${fp(m.e50[i])}</span>`:'')+
+      (intra&&ov.vwap?`<span style="color:${C('vwap')}">VWAP ${fp(m.vwap[i])}</span>`:'')+
       (ov.rsi&&m.rsi[i]!=null?`<span>RSI ${Math.round(m.rsi[i])}</span>`:'')};
   setLg(m.N-1);
   chart.subscribeCrosshairMove(p=>{const i=p&&p.time!=null?idxOf[p.time]:undefined;setLg(i==null?m.N-1:i)});
@@ -964,7 +987,7 @@ function renderDetail(m){
   <div class="d-head">
     <div class="d-id">
       <div class="row"><span class="d-sym">${esc(item.s)}</span><span class="dir ${item.dir}">${item.dir==='L'?'LÅNG':'KORT'}</span>${isW?`<span class="watchflag">Bevakning · ${STATUS[m.status]}</span>`:''}</div>
-      <div class="row"><span class="d-name">${esc(t[0])} · ${t[1]}</span><span class="d-price"><span class="p num">${f2(m.P)}</span><span>${cur}</span><span class="num ${t[4]>=0?'pos':'neg'}">${sgn(t[4],f2)} %</span></span></div>
+      <div class="row"><span class="d-name">${esc(t[0])} · ${t[1]}</span><span class="d-price"><span class="p num">${fp(m.P)}</span><span>${cur}</span><span class="num ${t[4]>=0?'pos':'neg'}">${sgn(t[4],f2)} %</span></span></div>
       <div class="setup">Setup: <b>${esc(item.setup)}</b> · ${H.t} (${H.valid})</div>
     </div>
     <div class="d-kpis">
@@ -974,7 +997,7 @@ function renderDetail(m){
       ${ring(m.score)}
     </div>
   </div>
-  ${m.valid===false?`<div class="intraday-note" style="background:var(--down-soft)"><b style="color:var(--down)">Ogiltig</b><span>Kursen har redan passerat stop loss (${f2(lv.sl)}). Setupen gäller inte längre — invänta en ny impuls.</span></div>`:''}
+  ${m.valid===false?`<div class="intraday-note" style="background:var(--down-soft)"><b style="color:var(--down)">Ogiltig</b><span>Kursen har redan passerat stop loss (${fp(lv.sl)}). Setupen gäller inte längre — invänta en ny impuls.</span></div>`:''}
   ${intra?`<div class="intraday-note"><b>Intradag</b><span>Positionen stängs senast ${hm(ex)} CET (${kindOf(item.s)==='stock'?t[1]:'certifikathandeln'} stänger ${hm(EX[t[1]].c)}), även om varken TP eller SL nåtts. Ingen position hålls över natten.</span></div>`:''}
   <div class="chart-box">
     <div class="chart-tools">
@@ -993,9 +1016,9 @@ function renderDetail(m){
     <section>
       <h3 class="sec-t"><span>Handelsplan</span><span>${cur}</span></h3>
       <table class="plan">
-        <tr><td><span class="lvl"><i style="background:var(--accent)"></i>Entry</span></td><td class="num">${f2(lv.zLo)}–${f2(lv.zHi)}</td><td class="sub">${isW?'Trigger':'Aktiv zon'}</td></tr>
-        <tr><td><span class="lvl"><i style="background:var(--down)"></i>Stop loss</span></td><td class="num">${f2(lv.sl)}</td><td class="sub num">${sgn(pctE(lv.sl))} % · −1R</td></tr>
-        ${['tp1','tp2','tp3'].map((k,i)=>`<tr><td><span class="lvl"><i style="background:var(--up)"></i>TP${i+1}</span> <span class="sub">${['tidigare topp','127,2 % ext.','161,8 % ext.'][i]}</span></td><td class="num">${f2(lv[k])}</td><td class="sub num">${sgn(pctE(lv[k]))} % · +${f1(rr[i])}R</td></tr>`).join('')}
+        <tr><td><span class="lvl"><i style="background:var(--accent)"></i>Entry</span></td><td class="num">${fp(lv.zLo)}–${fp(lv.zHi)}</td><td class="sub">${isW?'Trigger':'Aktiv zon'}</td></tr>
+        <tr><td><span class="lvl"><i style="background:var(--down)"></i>Stop loss</span></td><td class="num">${fp(lv.sl)}</td><td class="sub num">${sgn(pctE(lv.sl))} % · −1R</td></tr>
+        ${['tp1','tp2','tp3'].map((k,i)=>`<tr><td><span class="lvl"><i style="background:var(--up)"></i>TP${i+1}</span> <span class="sub">${['tidigare topp','127,2 % ext.','161,8 % ext.'][i]}</span></td><td class="num">${fp(lv[k])}</td><td class="sub num">${sgn(pctE(lv[k]))} % · +${f1(rr[i])}R</td></tr>`).join('')}
       </table>
       <div class="rr">
         <div class="rr-track"><span class="r" style="width:${rW}%"></span><span class="w" style="flex:1"></span></div>
@@ -1003,7 +1026,7 @@ function renderDetail(m){
       </div>
       <div class="stats">
         <div class="stat"><div class="l">Förväntat värde</div><div class="v ${m.ev>=0?'pos':'neg'}">${sgn(m.ev)}R</div></div>
-        <div class="stat"><div class="l">Risk per aktie</div><div class="v">${f2(m.risk)}</div></div>
+        <div class="stat"><div class="l">Risk per aktie</div><div class="v">${fp(m.risk)}</div></div>
         <div class="stat"><div class="l">${intra?'Tidsstopp':'Förslag exit'}</div><div class="v" style="font-size:12.5px;font-family:var(--body)">${intra?`Stäng ${hm(ex)}`:'⅓ vid varje TP'}</div></div>
       </div>
     </section>
@@ -1020,7 +1043,7 @@ function renderDetail(m){
       <p class="thesis">${esc(item.text)}</p>${m.real?'<p class="note">Exempeltext — motiveringen genereras inte ur kursdatan än. Nivåer, TA, momentum och Fibonacci är beräknade.</p>':''}
       <div class="conf">${confl.map(c=>`<span>${esc(c)}</span>`).join('')}</div>
       ${item.risk?`<div class="risk"><b>Risk</b><span>${esc(item.risk)}</span></div>`:''}
-      <p class="inval">Caset ogiltigförklaras vid ${intra?'handel':'stängning'} ${s>0?'under':'över'} <b class="num">${f2(lv.sl)}</b> ${cur}${intra?` — eller vid tidsstoppet ${hm(ex)}`:''}.</p>
+      <p class="inval">Caset ogiltigförklaras vid ${intra?'handel':'stängning'} ${s>0?'under':'över'} <b class="num">${fp(lv.sl)}</b> ${cur}${intra?` — eller vid tidsstoppet ${hm(ex)}`:''}.</p>
     </section>
     <section>
       <h3 class="sec-t"><span>${intra?'Certifikat & hävstång':m.hz==='vecka'?'Mini futures':'Instrument'}</span><span>Effekt vid TP2 / SL</span></h3>
@@ -1093,10 +1116,11 @@ function renderBacktest(){
   setTimeout(()=>{
     if(token!==btToken)return;
     const cfg=MAA.BT[hz],min=+document.getElementById('bt-min').value,cost=costPct(hz);
-    const p=pool(hz),seen=new Set(),items=[...p.top,...p.watch].filter(it=>!seen.has(it.s)&&seen.add(it.s)&&inMkt(it.s));
+    // automatic candidates are tested in both directions; case rows once per instrument
+    const key=it=>it.s+(it.auto?'|'+it.dir:''),p=pool(hz),seen=new Set(),items=[...p.top,...p.watch].filter(it=>!seen.has(key(it))&&seen.add(key(it))&&inMkt(it.s));
     const res={};let from=Infinity,to=0;const rows=[];
     for(const it of items){
-      const ser=REAL.symbols[it.s]&&REAL.symbols[it.s].series[cfg.ser],memo=btMemo[hz+'|'+it.s]||(btMemo[hz+'|'+it.s]={});
+      const ser=REAL.symbols[it.s]&&REAL.symbols[it.s].series[cfg.ser],memo=btMemo[hz+'|'+key(it)]||(btMemo[hz+'|'+key(it)]={});
       const row={it,by:{}};
       for(const [k,v] of Object.entries(MAA.VARIANTS)){
         const r=MAA.backtest(ser,it,hz,Object.assign({minScore:min},v),memo);if(!r)continue;
@@ -1146,7 +1170,7 @@ function renderBacktest(){
       </div>
       <div class="bt-card" style="margin-top:20px"><h3 class="sec-t"><span>Senaste affärerna</span><span>de 30 senaste</span></h3>
         <div class="bt-scroll"><table class="bt-tbl"><thead><tr><th>Signal</th><th>Instrument</th><th>Poäng</th><th>Entry</th><th>Stop loss</th><th>Utfall</th><th>Staplar</th><th>R netto</th></tr></thead><tbody>
-        ${trades.slice(-30).reverse().map(x=>`<tr><td>${fmtDate(x.t0,withTime)}</td><td><span class="dir ${x.dir}">${x.dir==='L'?'L':'K'}</span> ${esc(x.s)}</td><td>${x.score}</td><td>${f2(x.entry)}</td><td>${f2(x.sl)}</td><td><span class="res ${x.res}">${resLabel(x)}</span></td><td>${x.bars}</td><td class="${x.rn>=0?'pos':'neg'}">${sgn(x.rn,f2)}</td></tr>`).join('')||'<tr><td colspan="8">Inga affärer med vald minsta poäng.</td></tr>'}
+        ${trades.slice(-30).reverse().map(x=>`<tr><td>${fmtDate(x.t0,withTime)}</td><td><span class="dir ${x.dir}">${x.dir==='L'?'L':'K'}</span> ${esc(x.s)}</td><td>${x.score}</td><td>${fp(x.entry)}</td><td>${fp(x.sl)}</td><td><span class="res ${x.res}">${resLabel(x)}</span></td><td>${x.bars}</td><td class="${x.rn>=0?'pos':'neg'}">${sgn(x.rn,f2)}</td></tr>`).join('')||'<tr><td colspan="8">Inga affärer med vald minsta poäng.</td></tr>'}
         </tbody></table></div></div>
       <p class="bt-note">Så räknas det: en signal ges när poängen är minst ${min||'0'} och priset ligger på rätt sida om stop loss. En order läggs vid entrynivån och gäller i ${cfg.E} staplar. ⅓ säljs vid varje mål; resten stoppas eller säljs vid ${cfg.session?'dagens stängning':`tidsgränsen (${cfg.K} staplar)`}. Om stop loss och mål nås i samma stapel räknas stop loss. R = resultat i antal risker (1R = avståndet entry → stop loss), efter kostnad (${f2(cost)} % av positionen tur och retur, motsvarar spread och courtage). Hävstång ändrar inte resultatet i R när positionen storleksbestäms efter risk — den minskar bara kapitalet som binds. Bara teknisk analys, momentum och Fibonacci varierar över tiden; övriga poäng är dagens värden från caset, och instrumenten är valda i dag (efterhandsval). Historiskt resultat är ingen garanti för framtiden.</p>`;
     drawEquity(document.getElementById('eq'),curve,withTime);
@@ -1167,7 +1191,7 @@ function renderLog(out,hz){
       </tbody></table></div></div>
     <div class="bt-card" style="margin-top:20px"><h3 class="sec-t"><span>Loggade förslag · ${HZ[hz].t}</span><span>de 60 senaste</span></h3>
       <div class="bt-scroll"><table class="bt-tbl"><thead><tr><th>Loggad</th><th>Plats</th><th>Instrument</th><th>Poäng</th><th>Kurs</th><th>Entry</th><th>Stop loss</th><th>TP1</th><th>Status</th><th>R netto</th></tr></thead><tbody>
-      ${rows.map(x=>`<tr><td>${fmtDate(x.t0,withTime)}</td><td>${x.rank}</td><td><span class="dir ${x.dir}">${x.dir==='L'?'L':'K'}</span> ${esc(x.sym)}</td><td>${x.score}</td><td>${f2(x.price)}</td><td>${f2(x.entry)}</td><td>${f2(x.sl)}</td><td>${f2(x.tp[0])}</td><td>${stLabel(x)}</td><td class="${done(x)?(net(x)>=0?'pos':'neg'):''}">${done(x)?sgn(net(x),f2):'–'}</td></tr>`).join('')||'<tr><td colspan="10">Inga loggade förslag för den här horisonten än.</td></tr>'}
+      ${rows.map(x=>`<tr><td>${fmtDate(x.t0,withTime)}</td><td>${x.rank}</td><td><span class="dir ${x.dir}">${x.dir==='L'?'L':'K'}</span> ${esc(x.sym)}</td><td>${x.score}</td><td>${fp(x.price)}</td><td>${fp(x.entry)}</td><td>${fp(x.sl)}</td><td>${fp(x.tp[0])}</td><td>${stLabel(x)}</td><td class="${done(x)?(net(x)>=0?'pos':'neg'):''}">${done(x)?sgn(net(x),f2):'–'}</td></tr>`).join('')||'<tr><td colspan="10">Inga loggade förslag för den här horisonten än.</td></tr>'}
       </tbody></table></div></div>
     <p class="bt-note">Varje förslag följs från tidpunkten det loggades: order vid entrynivån, ⅓ säljs vid varje mål, stop loss och tidsgräns som i simuleringen. Intradag följs på 5-minutersdata, vecka på timdata och längre horisonter på dagsdata. Kostnad ${f2(cost)} % av positionen tur och retur.</p>`;
 }
@@ -1293,6 +1317,7 @@ function mergeParts(parts){
   for(const d of parts){if(!d||!d.symbols)continue;
     out.parts[d.part||'all']=d.generated;
     if(d.indices&&Object.keys(d.indices).length)out.indices=d.indices;
+    if(d.meta)out.meta=d.meta;
     for(const [sym,x] of Object.entries(d.symbols)){
       const t=out.symbols[sym]||(out.symbols[sym]={series:{}});
       for(const k of ['currency','last','prevClose','asOf'])if(x[k]!=null)t[k]=x[k];
@@ -1326,6 +1351,11 @@ async function deriveKek(user,pass,auth){
 async function openBox(keyRaw,box){
   const k=await subtle.importKey('raw',keyRaw,'AES-GCM',false,['decrypt']);
   return subtle.decrypt({name:'AES-GCM',iv:b64d(box.iv)},k,b64d(box.ct));
+}
+// data files are gzip-compressed before encryption ("z":"gzip")
+async function unpack(box,buf){
+  if(box.z!=='gzip')return buf;
+  return new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
 }
 async function unwrapDek(auth,sess){
   const box=sess&&auth.users[sess.uid];if(!box)return null;
@@ -1371,7 +1401,7 @@ async function fetchParts(base,auth){
   const parts=await Promise.all(['intra','hour','daily','log','lab'].map(async p=>{
     const hit=partCache[p];if(manifest&&hit&&manifest[p]&&hit.gen===manifest[p])return hit.data;
     let d=null;
-    if(auth){const bx=await getJSON(base+p+'.enc.json');if(bx){try{d=JSON.parse(new TextDecoder().decode(await openBox(dekRaw,bx)))}catch(e){}}}
+    if(auth){const bx=await getJSON(base+p+'.enc.json');if(bx){try{d=JSON.parse(new TextDecoder().decode(await unpack(bx,await openBox(dekRaw,bx))))}catch(e){}}}
     else d=await getJSON(base+p+'.json');
     if(d)partCache[p]={gen:d.generated,data:d};
     return d;
@@ -1406,6 +1436,7 @@ function applyData(d){
   const changed=!REAL||REAL.generated!==d.generated||JSON.stringify(REAL.parts)!==JSON.stringify(d.parts);
   REAL=d;loadedAt=Date.now();
   if(changed){
+    addMeta(d.meta,d.symbols);
     for(const [sym,x] of Object.entries(d.symbols)){if(T[sym]&&x.last){T[sym][3]=x.last;if(x.prevClose)T[sym][4]=(x.last/x.prevClose-1)*100}}
     for(const k in cache)delete cache[k];
     btMemo={};

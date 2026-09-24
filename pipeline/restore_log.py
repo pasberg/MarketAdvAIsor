@@ -7,6 +7,7 @@ SITE_USERS so the history of logged picks is not lost.
 from __future__ import annotations
 
 import base64
+import gzip
 import json
 import os
 import subprocess
@@ -15,7 +16,10 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from encrypt_data import derive_kek, parse_users, user_id
+try:
+    from encrypt_data import derive_kek, parse_users, user_id
+except ImportError:  # imported as pipeline.restore_log (tests)
+    from pipeline.encrypt_data import derive_kek, parse_users, user_id
 
 
 def _git_show(path: str) -> bytes | None:
@@ -26,7 +30,8 @@ def _git_show(path: str) -> bytes | None:
 
 
 def unseal(key: bytes, box: dict) -> bytes:
-    return AESGCM(key).decrypt(base64.b64decode(box["iv"]), base64.b64decode(box["ct"]), None)
+    plain = AESGCM(key).decrypt(base64.b64decode(box["iv"]), base64.b64decode(box["ct"]), None)
+    return gzip.decompress(plain) if box.get("z") == "gzip" else plain
 
 
 def restore(auth: dict, box: dict, users: dict[str, str]) -> bytes | None:

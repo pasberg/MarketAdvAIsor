@@ -111,6 +111,15 @@ class Lab(unittest.TestCase):
         # the first re-selection needs two years of weekly history
         self.assertEqual(res["period"]["wf_start"], str(idx[104].date()))
 
+    def test_load_prices_skips_currencies(self):
+        import json, tempfile
+        from pathlib import Path
+        ser = {"t": [86400 * i for i in range(80)], "o": [1.0] * 80, "h": [1.0] * 80, "l": [1.0] * 80, "c": [1.0] * 80}
+        d = {"symbols": {"VOLV-B": {"kind": "stock", "series": {"day": ser}}, "EURUSD": {"kind": "fx", "series": {"day": ser}}}}
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "daily.json").write_text(json.dumps(d))
+            self.assertEqual(set(lab.load_prices(Path(tmp))), {"VOLV-B"})
+
     def test_weekly_grids_stay_small(self):
         for key, fam in lab.WEEKLY_FAMILIES.items():
             self.assertLessEqual(len(fam["grid"]), 4, key)

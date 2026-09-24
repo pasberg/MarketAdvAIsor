@@ -1,4 +1,5 @@
 import base64
+import gzip
 import json
 import shutil
 import subprocess
@@ -9,6 +10,7 @@ from pathlib import Path
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from pipeline.encrypt_data import derive_kek, encrypt_dir, parse_users, user_id
+from pipeline.restore_log import restore
 
 ITER = 1000  # fast for tests; production uses ITERATIONS
 
@@ -41,7 +43,9 @@ class EncryptData(unittest.TestCase):
         box = auth["users"][user_id("Anna")]
         dek = unseal(derive_kek("ANNA ", "pw1", ITER), box)
         enc = json.loads((self.tmp / "dst" / "intra.enc.json").read_text())
-        self.assertEqual(json.loads(unseal(dek, enc))["x"], "åäö")
+        self.assertEqual(enc["z"], "gzip")
+        self.assertEqual(json.loads(gzip.decompress(unseal(dek, enc)))["x"], "åäö")
+        self.assertEqual(json.loads(restore(auth, enc, {"anna": "pw1"}))["x"], "åäö")
         with self.assertRaises(Exception):
             unseal(derive_kek("anna", "fel", ITER), box)
 
@@ -67,7 +71,10 @@ const b=s=>Uint8Array.from(Buffer.from(s,'base64'));
   const u=auth.users[uid];
   const dek=await subtle.importKey('raw',await subtle.decrypt({name:'AES-GCM',iv:b(u.iv)},kek,b(u.ct)),'AES-GCM',false,['decrypt']);
   const e=JSON.parse(fs.readFileSync(dir+'/intra.enc.json'));
-  console.log(new TextDecoder().decode(await subtle.decrypt({name:'AES-GCM',iv:b(e.iv)},dek,b(e.ct))));
+  const plain=await subtle.decrypt({name:'AES-GCM',iv:b(e.iv)},dek,b(e.ct));
+  // same unpacking as the page: DecompressionStream for gzip boxes
+  const raw=e.z==='gzip'?await new Response(new Blob([plain]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer():plain;
+  console.log(new TextDecoder().decode(raw));
 })().catch(e=>{console.error(e);process.exit(1)});
 """
         out = subprocess.run(["node", "-e", js, str(self.tmp / "dst")], capture_output=True, text=True, check=True)

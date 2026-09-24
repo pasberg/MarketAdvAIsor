@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import calendar
+import csv
 import json
 import math
 import sys
@@ -27,29 +28,35 @@ from pathlib import Path
 
 LOCAL_TZ = "Europe/Stockholm"
 
+UNIVERSE_FILE = Path(__file__).resolve().parent.parent / "config" / "universe.csv"
+US_EXCHANGES = {"Nasdaq", "NYSE", "Index USA"}
+# kind -> intraday session kept (Stockholm minutes [from, to)); currencies trade around the clock,
+# but the owner closes intraday positions by 22:00, so the intraday day is 08:00–22:00
+SESSION = {"fx": (8 * 60, 22 * 60)}
+
+
+def load_universe(path: Path = UNIVERSE_FILE) -> dict[str, dict]:
+    """The instruments the site covers, from config/universe.csv (one row per instrument).
+
+    Columns: sym, name, yahoo, currency, exchange, kind (stock|index|commodity|fx), tags
+    (market filters on the page), avanza_id (orderbook id, optional), avanza_name (name used in
+    Avanza's product lists)."""
+    out = {}
+    with path.open(encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            sym = row["sym"].strip()
+            if not sym or sym.startswith("#"):
+                continue
+            aid = row.get("avanza_id", "").strip()
+            out[sym] = {"name": row["name"].strip(), "yahoo": row["yahoo"].strip(), "currency": row["currency"].strip(),
+                        "exchange": row["exchange"].strip(), "kind": row["kind"].strip(), "tags": row["tags"].strip(),
+                        "avanza_id": int(aid) if aid else None, "avanza_name": row.get("avanza_name", "").strip()}
+    return out
+
+
+UNIVERSE = load_universe()
 # page symbol -> (Yahoo symbol, currency, 1-minute intraday bars (US) instead of 5-minute)
-SYMBOLS = {
-    "NVDA": ("NVDA", "USD", True), "MSFT": ("MSFT", "USD", True), "AAPL": ("AAPL", "USD", True),
-    "AMZN": ("AMZN", "USD", True), "META": ("META", "USD", True), "AVGO": ("AVGO", "USD", True),
-    "AMD": ("AMD", "USD", True), "GOOGL": ("GOOGL", "USD", True), "TSLA": ("TSLA", "USD", True),
-    "COST": ("COST", "USD", True), "NFLX": ("NFLX", "USD", True), "JPM": ("JPM", "USD", True),
-    "LLY": ("LLY", "USD", True), "XOM": ("XOM", "USD", True), "CAT": ("CAT", "USD", True),
-    "UNH": ("UNH", "USD", True), "V": ("V", "USD", True),
-    "VOLV-B": ("VOLV-B.ST", "SEK", False), "ATCO-A": ("ATCO-A.ST", "SEK", False),
-    "ERIC-B": ("ERIC-B.ST", "SEK", False), "SAAB-B": ("SAAB-B.ST", "SEK", False),
-    "INVE-B": ("INVE-B.ST", "SEK", False), "SEB-A": ("SEB-A.ST", "SEK", False),
-    "ASSA-B": ("ASSA-B.ST", "SEK", False), "SAND": ("SAND.ST", "SEK", False),
-    "HM-B": ("HM-B.ST", "SEK", False), "EVO": ("EVO.ST", "SEK", False), "ABB": ("ABB.ST", "SEK", False),
-    "NDA-SE": ("NDA-SE.ST", "SEK", False), "NOVO-B": ("NOVO-B.CO", "DKK", False),
-    "DSV": ("DSV.CO", "DKK", False), "VWS": ("VWS.CO", "DKK", False),
-    "EQNR": ("EQNR.OL", "NOK", False), "MOWI": ("MOWI.OL", "NOK", False),
-    "NESTE": ("NESTE.HE", "EUR", False), "KNEBV": ("KNEBV.HE", "EUR", False),
-    "NOKIA": ("NOKIA.HE", "EUR", False),
-    # indices and commodities (front-month futures), tradable via certificates
-    "OMXS30": ("^OMX", "SEK", False), "SPX": ("^GSPC", "USD", True), "NDX100": ("^NDX", "USD", True),
-    "GOLD": ("GC=F", "USD", False), "SILVER": ("SI=F", "USD", False),
-    "COPPER": ("HG=F", "USD", False), "BRENT": ("BZ=F", "USD", False),
-}
+SYMBOLS = {sym: (u["yahoo"], u["currency"], u["exchange"] in US_EXCHANGES) for sym, u in UNIVERSE.items()}
 
 # value: Yahoo symbol, or candidates tried in order (the first with data wins)
 INDICES = {
@@ -83,14 +90,23 @@ def _local_epoch(ts, daily: bool) -> int:
     return calendar.timegm(local.replace(tzinfo=None).timetuple())
 
 
-def frame_to_series(df, interval: str, max_bars: int, last_session_only: bool = False) -> dict | None:
-    """Convert one ticker's OHLCV DataFrame to the compact column format."""
+def frame_to_series(df, interval: str, max_bars: int, last_session_only: bool = False,
+                    session: tuple[int, int] | None = None) -> dict | None:
+    """Convert one ticker's OHLCV DataFrame to the compact column format.
+
+    session: keep only bars starting within [from, to) Stockholm minutes (intraday series only)."""
     if df is None or df.empty:
         return None
     df = df.dropna(subset=["Open", "High", "Low", "Close"])
     if df.empty:
         return None
     daily = interval in ("1d", "1wk")
+    if session and not daily:
+        idx = df.index.tz_convert(LOCAL_TZ) if df.index.tz is not None else df.index
+        mins = idx.hour * 60 + idx.minute
+        df = df[(mins >= session[0]) & (mins < session[1])]
+        if df.empty:
+            return None
     if last_session_only:
         idx = df.index.tz_convert(LOCAL_TZ) if df.index.tz is not None else df.index
         last_day = idx[-1].date()
@@ -107,16 +123,34 @@ def frame_to_series(df, interval: str, max_bars: int, last_session_only: bool = 
     }
 
 
-def _download(yf, tickers: list[str], interval: str, period: str) -> dict:
-    """Download several tickers; returns {yahoo_ticker: DataFrame}."""
+def _download_once(yf, tickers: list[str], interval: str, period: str) -> dict:
     data = yf.download(tickers, interval=interval, period=period, group_by="ticker",
                        auto_adjust=False, prepost=False, threads=True, progress=False)
     out = {}
     for t in tickers:
         try:
-            out[t] = data[t] if len(tickers) > 1 else data
-        except KeyError:
-            out[t] = None
+            df = data[t] if len(tickers) > 1 else data
+        except (KeyError, TypeError):
+            df = None
+        out[t] = None if df is None or df.dropna(how="all").empty else df
+    return out
+
+
+def _download(yf, tickers: list[str], interval: str, period: str, retries: int = 1) -> dict:
+    """Download several tickers; returns {yahoo_ticker: DataFrame or None}.
+
+    Yahoo sometimes drops single tickers from a large request (rate limits), so the ones
+    without data are requested again, in a smaller batch."""
+    tickers = list(dict.fromkeys(tickers))
+    out = _download_once(yf, tickers, interval, period)
+    for _ in range(retries):
+        missing = [t for t, df in out.items() if df is None]
+        if not missing:
+            break
+        try:
+            out.update({t: df for t, df in _download_once(yf, missing, interval, period).items() if df is not None})
+        except Exception:  # a failed retry keeps what the first request returned
+            break
     return out
 
 
@@ -126,7 +160,7 @@ PARTS = ("intra", "hour", "daily")
 def _new_part(name: str) -> dict:
     return {"part": name, "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "source": "Yahoo Finance (yfinance) — endast för prototyp", "tz": LOCAL_TZ,
-            "symbols": {sym: {"currency": cur, "series": {}} for sym, (_, cur, _) in SYMBOLS.items()},
+            "symbols": {sym: {"currency": u["currency"], "kind": u["kind"], "series": {}} for sym, u in UNIVERSE.items()},
             "errors": {}}
 
 
@@ -134,8 +168,9 @@ def _put(part: dict, key: str, frames: dict, interval: str, max_bars: int, last_
     for sym, (ysym, _, _) in SYMBOLS.items():
         if ysym not in frames:
             continue
+        session = SESSION.get(UNIVERSE[sym]["kind"]) if key in ("intra", "intra5") else None
         try:
-            s = frame_to_series(frames[ysym], interval, max_bars, last_session)
+            s = frame_to_series(frames[ysym], interval, max_bars, last_session, session)
             if s:
                 part["symbols"][sym]["series"][key] = s
             else:
@@ -160,6 +195,9 @@ def build_intra(yf) -> dict:
         if intra and intra["c"]:
             info["last"] = intra["c"][-1]
             info["asOf"] = intra["t"][-1]
+    # names, exchanges and Avanza ids, so the page can show instruments it has no built-in entry for
+    part["meta"] = {sym: {k: u[k] for k in ("name", "exchange", "kind", "tags", "avanza_id", "avanza_name")}
+                    for sym, u in UNIVERSE.items()}
     part["indices"] = {}
     cands = {name: ([y] if isinstance(y, str) else y) for name, y in INDICES.items()}
     idx_frames = _download(yf, [y for ys in cands.values() for y in ys], "1d", "3mo")
@@ -200,13 +238,32 @@ def build(yf, parts=PARTS) -> dict[str, dict]:
     return {p: BUILDERS[p](yf) for p in parts}
 
 
+def missing_parts(out_dir: Path) -> list[str]:
+    """Parts never fetched, or fetched before instruments were added to the universe."""
+    out = []
+    for p in PARTS:
+        f = out_dir / f"{p}.json"
+        try:
+            have = set(json.loads(f.read_text(encoding="utf-8"))["symbols"])
+        except (OSError, ValueError, KeyError):
+            have = set()
+        if set(UNIVERSE) - have:
+            out.append(p)
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--out-dir", default="data")
     ap.add_argument("--parts", default=",".join(PARTS),
                     help="kommaseparerat: intra (var 5:e min), hour (var 30:e min), daily (2 ggr/dag)")
+    ap.add_argument("--missing-parts", action="store_true",
+                    help="skriv bara ut delar som saknas i --out-dir eller saknar instrument från config/universe.csv")
     args = ap.parse_args(argv)
-    parts = [p for p in args.parts.split(",") if p]
+    if args.missing_parts:
+        print(",".join(missing_parts(Path(args.out_dir))))
+        return 0
+    parts = list(dict.fromkeys(p for p in args.parts.split(",") if p))
     unknown = set(parts) - set(PARTS)
     if unknown:
         ap.error(f"okända delar: {', '.join(sorted(unknown))}")

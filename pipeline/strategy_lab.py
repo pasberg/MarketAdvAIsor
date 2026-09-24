@@ -285,9 +285,13 @@ WEEKLY_FAMILIES = {
 
 # ---------- evaluation ----------
 def load_prices(data_dir: Path, series: str = "day") -> dict[str, pd.DataFrame]:
+    """Shares, indices and commodities from daily.json. Currencies are left out: the strategies here
+    are built for markets with a long-run upward drift, and a currency pair has none."""
     d = json.loads((data_dir / "daily.json").read_text(encoding="utf-8"))
     out = {}
     for sym, x in d["symbols"].items():
+        if x.get("kind") == "fx":
+            continue
         s = x.get("series", {}).get(series)
         if not s or len(s["c"]) < 60:
             continue

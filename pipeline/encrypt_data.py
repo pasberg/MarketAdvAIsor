@@ -4,7 +4,8 @@ The site is static and the repository is public, so a login screen alone would
 not protect anything. Instead the data files are encrypted and the page decrypts
 them in the browser after login:
 
-- A fresh random data key (AES-256-GCM) encrypts each data file -> <name>.enc.json.
+- A fresh random data key (AES-256-GCM) encrypts each data file -> <name>.enc.json. The file is
+  gzip-compressed first ("z": "gzip" in the box); price data shrinks to about a fifth.
 - For every user in SITE_USERS a key is derived from the password with
   PBKDF2-SHA256 and used to wrap (encrypt) the data key. auth.json holds the
   wrapped keys, indexed by a SHA-256 hash of the user name (names are not published).
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import gzip
 import hashlib
 import json
 import os
@@ -80,7 +82,8 @@ def encrypt_dir(src: Path, dst: Path, users: dict[str, str], iterations: int = I
         if not f.exists():
             continue
         out = dst / f"{part}.enc.json"
-        out.write_text(json.dumps({"v": 1, **seal(dek, f.read_bytes())}), encoding="utf-8")
+        packed = gzip.compress(f.read_bytes(), compresslevel=9, mtime=0)
+        out.write_text(json.dumps({"v": 2, "z": "gzip", **seal(dek, packed)}), encoding="utf-8")
         written.append(out.name)
     auth = {"v": 1, "kdf": "PBKDF2-SHA256", "iterations": iterations, "saltPrefix": SALT_PREFIX.decode(),
             "users": {user_id(u): seal(derive_kek(u, p, iterations), dek) for u, p in users.items()}}

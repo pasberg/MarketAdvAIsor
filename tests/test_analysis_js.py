@@ -53,6 +53,27 @@ console.log(JSON.stringify(M.simulateTrade(all,0,lv,1,{{E:3,K:10}},{json.dumps(o
 
 
 @unittest.skipUnless(shutil.which("node"), "node saknas")
+class AutoCandidates(unittest.TestCase):
+    def test_every_instrument_with_data_is_a_candidate(self):
+        r = node("""const M=require('./mockup/analysis.js');
+const ser=p=>({t:p.map((_,i)=>i*86400),o:p,h:p.map(x=>x+1),l:p.map(x=>x-1),c:p,v:p.map(()=>1)});
+const up=[],down=[];for(let i=0;i<60;i++){up.push(100+i);down.push(200-i)}for(let i=0;i<8;i++){up.push(159-i*2);down.push(141+i*2)}
+const symbols={AAA:{series:{day:ser(up)}},BBB:{series:{day:ser(down)}},CCC:{series:{day:ser([1,2,3])}}};
+const cases={manad:{top:[['AAA','L',.5,'s','t',[80,80,80,80,80,80],'r']],watch:[]}};
+const p=M.pool(cases,'manad',symbols);
+const picks=M.topPicks(cases,symbols,'manad');
+console.log(JSON.stringify({pool:p.top.map(x=>x.s+x.dir+(x.auto?'*':'')),picks:picks.map(m=>[m.item.s,m.item.dir,m.item.auto||false,m.item.setup,m.item.text.slice(0,20)])}));""")
+        # the case row stays as it is; BBB (no case) is tried both ways; CCC has too little data
+        self.assertEqual(r["pool"], ["AAAL", "BBBL*", "BBBS*"])
+        by = {p[0]: p for p in r["picks"]}
+        self.assertEqual(len(r["picks"]), 2)  # one analysis per instrument
+        self.assertEqual(by["BBB"][1], "S")  # falling market: the short scores higher
+        self.assertTrue(by["BBB"][2])
+        self.assertIn("i nedtrend", by["BBB"][3])
+        self.assertTrue(by["BBB"][4].startswith("Automatiskt urval"))
+
+
+@unittest.skipUnless(shutil.which("node"), "node saknas")
 class PickLogger(unittest.TestCase):
     def test_due_plans(self):
         r = node("""const L=require('./pipeline/log_picks.js');

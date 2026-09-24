@@ -4,8 +4,10 @@
 set -euo pipefail
 parts="${1:-intra,hour,daily}"
 
-# a part that was never fetched (e.g. empty cache) is fetched as well
-for p in intra hour daily; do [ -f "data/$p.json" ] || parts="$parts,$p"; done
+# a part that was never fetched (e.g. empty cache), or lacks instruments added to
+# config/universe.csv, is fetched as well
+missing="$(python pipeline/fetch_market_data.py --out-dir data --missing-parts)"
+[ -n "$missing" ] && parts="$parts,$missing"
 python pipeline/fetch_market_data.py --out-dir data --parts "$parts"
 
 # log today's recommendations and follow up earlier ones (history survives a lost cache)
