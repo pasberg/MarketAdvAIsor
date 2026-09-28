@@ -26,8 +26,6 @@ och lägg gärna till nya idéer längst ned.
 
 Ordningen är satt av ägaren (2026-09-23) efter genomgången av labbets första resultat.
 
-- [ ] **Lista utan efterhandsval** — testa på ett urval som inte är valt för att det gått bra, t.ex. alla
-      nuvarande och tidigare bolag i OMXS30. Kräver ny datahämtning och ett eget universum i labbet.
 - [ ] **Marknadsregimfilter** — handla bara aktier när deras index (OMXS30 för Norden, SPX för USA)
       ligger över sitt 200-dagars medelvärde. Kombinera med Donchian och RSI(2).
 - [ ] **Keltner-utbrott** — köp stängning över EMA(20) + 2 × ATR(10), sälj under EMA(20).
@@ -50,3 +48,5 @@ Ordningen är satt av ägaren (2026-09-23) efter genomgången av labbets första
 - [x] Volatilitetsstyrd exponering — Faber, Donchian, ATR-stop och tidsseriemomentum där hela portföljen
       skalas mot 15 % årlig volatilitet (max 1,5 gånger, lånekostnad `LEVERAGE_COST_PCT_YEAR`).
 - [x] Dubbelt momentum (Antonacci) — rotation mellan OMXS30, S&P 500, Nasdaq 100 och guld, 6 och 12 månader.
+- [x] Lista utan efterhandsval — nuvarande och tidigare OMXS30-bolag (`config/lab_omxs30.csv`), tio års
+      dagsdata med egen hämtning, labbet körs på listan (`omxs30` i lab.json). Avnoterade bolag utan kurser redovisas.
