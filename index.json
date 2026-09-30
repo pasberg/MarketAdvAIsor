@@ -324,7 +324,17 @@
 "bars": 16552,
 "complete": true,
 "symbols": 172
+},
+"2026-09-29": {
+"bars": 16544,
+"complete": true,
+"symbols": 172
+},
+"2026-09-30": {
+"bars": 12795,
+"complete": false,
+"symbols": 172
 }
 },
-"updated": "2026-09-28T20:37:08+00:00"
+"updated": "2026-09-30T15:51:29+00:00"
 }
