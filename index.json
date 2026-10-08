@@ -359,7 +359,12 @@
 "bars": 16540,
 "complete": true,
 "symbols": 172
+},
+"2026-10-08": {
+"bars": 12860,
+"complete": false,
+"symbols": 172
 }
 },
-"updated": "2026-10-07T20:36:35+00:00"
+"updated": "2026-10-08T15:51:35+00:00"
 }
