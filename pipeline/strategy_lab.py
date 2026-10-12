@@ -301,6 +301,82 @@ def load_prices(data_dir: Path, series: str = "day") -> dict[str, pd.DataFrame]:
     return out
 
 
+# ---------- a universe without hindsight: current and former OMXS30 members ----------
+OMXS30_FILE = Path(__file__).resolve().parent.parent / "config" / "lab_omxs30.csv"
+OMXS30_HISTORY = "10y"
+OMXS30_MAX_AGE_H = 20  # the cached prices are refetched once a day
+
+
+def load_member_list(path: Path = OMXS30_FILE) -> list[dict]:
+    """Rows of config/lab_omxs30.csv: sym, name, yahoo (empty when no prices exist), status
+    (nuvarande / tidigare / avnoterad)."""
+    import csv
+    with path.open(encoding="utf-8", newline="") as f:
+        return [r for r in csv.DictReader(f) if r["sym"] and not r["sym"].startswith("#")]
+
+
+def frames_to_json(prices: dict[str, pd.DataFrame]) -> dict:
+    return {s: {"t": [int(t.timestamp()) for t in df.index], **{k: [None if pd.isna(x) else round(float(x), 4) for x in df[k]] for k in "ohlc"}}
+            for s, df in prices.items()}
+
+
+def frames_from_json(d: dict) -> dict[str, pd.DataFrame]:
+    out = {}
+    for s, x in d.items():
+        df = pd.DataFrame({k: x[k] for k in "ohlc"}, index=pd.to_datetime(x["t"], unit="s"), dtype=float).dropna()
+        if len(df) >= 60:
+            out[s] = df[~df.index.duplicated()]
+    return out
+
+
+def fetch_members(rows: list[dict], yf) -> dict[str, pd.DataFrame]:
+    """Ten years of daily bars for every member that still has prices on Yahoo."""
+    tick = {r["yahoo"]: r["sym"] for r in rows if r.get("yahoo")}
+    data = yf.download(list(tick), interval="1d", period=OMXS30_HISTORY, group_by="ticker", auto_adjust=True,
+                       threads=True, progress=False)
+    out = {}
+    for y, sym in tick.items():
+        try:
+            df = data[y] if len(tick) > 1 else data
+        except KeyError:
+            continue
+        df = df.rename(columns={"Open": "o", "High": "h", "Low": "l", "Close": "c"})[["o", "h", "l", "c"]].dropna()
+        if len(df) >= 60:
+            df.index = pd.to_datetime(df.index).tz_localize(None).normalize()
+            out[sym] = df
+    return out
+
+
+def member_prices(data_dir: Path, rows: list[dict], yf=None, now: datetime | None = None) -> dict[str, pd.DataFrame]:
+    """Prices for the member list, cached in data/lab_omxs30_prices.json and refetched once a day."""
+    cache = data_dir / "lab_omxs30_prices.json"
+    now = now or datetime.now(timezone.utc)
+    old = json.loads(cache.read_text(encoding="utf-8")) if cache.exists() else None
+    fresh = old and (now - datetime.fromisoformat(old["fetched"])).total_seconds() < OMXS30_MAX_AGE_H * 3600
+    if not fresh:
+        try:
+            if yf is None:
+                import yfinance as yf  # noqa: F811
+            got = fetch_members(rows, yf)
+            if got:
+                old = {"fetched": now.isoformat(timespec="seconds"), "prices": frames_to_json(got)}
+                cache.write_text(json.dumps(old, separators=(",", ":")), encoding="utf-8")
+        except Exception as e:  # keep the cached prices when the fetch fails
+            print(f"OMXS30-listan: kunde inte hämta kurser ({e})")
+    return frames_from_json(old["prices"]) if old else {}
+
+
+def run_members(prices: dict[str, pd.DataFrame], rows: list[dict], cost_pct: float = COST_PCT) -> dict:
+    """The daily lab on the member list, with an account of who is in it and who is missing."""
+    res = run(prices, cost_pct)
+    status = {r["sym"]: r["status"] for r in rows}
+    res["members"] = {
+        "with_prices": sorted(prices), "former": sorted(s for s in prices if status.get(s) == "tidigare"),
+        "missing": [{"sym": r["sym"], "name": r["name"], "status": r["status"]} for r in rows if r["sym"] not in prices],
+    }
+    return res
+
+
 def strategy_returns(prices: dict[str, pd.DataFrame], fn, params: dict, cost_pct: float = COST_PCT, rotation: bool = False,
                      ppy: int = YEAR):
     """Daily returns per instrument (columns) and positions, trading at the close after the signal.
@@ -525,6 +601,10 @@ def main() -> int:
     weekly = load_prices(data_dir, "week")
     if len(weekly) >= 5:
         res["weekly"] = run(weekly, a.cost, WEEKLY_FAMILIES, WEEKS)
+    rows = load_member_list()
+    members = member_prices(data_dir, rows)
+    if len(members) >= 5:
+        res["omxs30"] = run_members(members, rows, a.cost)
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     out = data_dir / "lab.json"
     prev = json.loads(out.read_text(encoding="utf-8")) if out.exists() else {}
@@ -543,6 +623,11 @@ def main() -> int:
     if "weekly" in res:
         w = res["weekly"]
         print(f"Veckodata: {w['configs_tested']} varianter, {w['period']['start']} – {w['period']['end']}; mästare: {w['champion']['name']} {w['champion']['params']}")
+    if "omxs30" in res:
+        o = res["omxs30"]
+        print(f"OMXS30 nuvarande och tidigare: {len(o['members']['with_prices'])} bolag ({len(o['members']['former'])} tidigare), "
+              f"{len(o['members']['missing'])} saknar kurser; köp och behåll {o['benchmark']['wf'].get('cagr')} %/år, "
+              f"mästare {o['champion']['name']} {o['champion']['wf'].get('cagr')} %/år")
     return 0
 
 

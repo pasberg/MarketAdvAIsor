@@ -178,5 +178,72 @@ class Lab(unittest.TestCase):
         self.assertTrue(all(0 <= s["weight"] <= lab.VOL_MAX_LEVERAGE for s in combo["signals"]))
 
 
+class Members(unittest.TestCase):
+    """The universe without hindsight: current and former OMXS30 members."""
+
+    def fake_yf(self, closes: dict[str, list[float]]):
+        idx = pd.bdate_range("2020-01-01", periods=max(len(v) for v in closes.values()))
+
+        class YF:
+            calls = 0
+
+            @staticmethod
+            def download(tickers, **kw):
+                YF.calls += 1
+                frames = {}
+                for t in tickers:
+                    c = pd.Series(closes[t], index=idx[:len(closes[t])], dtype=float)
+                    frames[t] = pd.DataFrame({"Open": c, "High": c * 1.01, "Low": c * 0.99, "Close": c}).reindex(idx)
+                return pd.concat(frames, axis=1)
+        return YF
+
+    def test_member_list_file(self):
+        rows = lab.load_member_list()
+        self.assertGreaterEqual(len(rows), 40)
+        self.assertEqual({r["status"] for r in rows}, {"nuvarande", "tidigare", "avnoterad"})
+        self.assertTrue(all(r["yahoo"] == "" for r in rows if r["status"] == "avnoterad"))
+
+    def test_prices_are_cached_for_a_day(self):
+        import tempfile
+        from datetime import datetime, timedelta, timezone
+        from pathlib import Path
+        rows = [{"sym": "A", "name": "A", "yahoo": "A.ST", "status": "nuvarande"},
+                {"sym": "B", "name": "B", "yahoo": "B.ST", "status": "tidigare"},
+                {"sym": "C", "name": "C", "yahoo": "", "status": "avnoterad"}]
+        yf = self.fake_yf({"A.ST": list(np.linspace(100, 150, 300)), "B.ST": list(np.linspace(100, 20, 150))})
+        now = datetime(2026, 9, 28, 6, tzinfo=timezone.utc)
+        with tempfile.TemporaryDirectory() as tmp:
+            p1 = lab.member_prices(Path(tmp), rows, yf, now)
+            p2 = lab.member_prices(Path(tmp), rows, yf, now + timedelta(hours=2))
+            self.assertEqual(yf.calls, 1)  # the second call used the cache
+            self.assertEqual(set(p1), {"A", "B"})
+            self.assertEqual(len(p2["B"]), 150)  # a former member keeps its shorter history
+            lab.member_prices(Path(tmp), rows, yf, now + timedelta(hours=25))
+            self.assertEqual(yf.calls, 2)
+
+    def test_a_member_that_disappears_is_counted_until_it_does(self):
+        # the loser falls 80 % and then has no more prices: buy and hold must include the fall,
+        # and the returns before it disappears must not depend on later data of the others
+        rng = np.random.default_rng(8)
+        up = frame(100 * np.cumprod(1 + rng.normal(0.001, 0.01, 400)))
+        loser = frame(np.linspace(100, 20, 200))
+        full = {"UP": up, "LOSER": loser}
+        r_full = lab.portfolio(lab.strategy_returns(full, lab.buy_hold, {}, 0)[0])
+        self.assertLess(r_full.iloc[:200].sum(), lab.portfolio(lab.strategy_returns({"UP": up}, lab.buy_hold, {}, 0)[0]).iloc[:200].sum())
+        cut = {"UP": up.iloc[:250], "LOSER": loser}
+        r_cut = lab.portfolio(lab.strategy_returns(cut, lab.buy_hold, {}, 0)[0])
+        pd.testing.assert_series_equal(r_full.iloc[:250], r_cut.iloc[:250])
+
+    def test_run_members_reports_who_is_missing(self):
+        rng = np.random.default_rng(9)
+        prices = {s: frame(100 * np.cumprod(1 + rng.normal(0.0005, 0.012, 700))) for s in ("A", "B", "C", "D", "E")}
+        rows = [{"sym": s, "name": s, "yahoo": s, "status": "tidigare" if s == "E" else "nuvarande"} for s in prices] + \
+               [{"sym": "X", "name": "Swedish Match", "yahoo": "", "status": "avnoterad"}]
+        res = lab.run_members(prices, rows)
+        self.assertEqual(res["members"]["former"], ["E"])
+        self.assertEqual(res["members"]["missing"], [{"sym": "X", "name": "Swedish Match", "status": "avnoterad"}])
+        self.assertIn("champion", res)
+
+
 if __name__ == "__main__":
     unittest.main()
