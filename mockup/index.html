@@ -294,6 +294,12 @@ table.wl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
 .res{font-size:11px;font-weight:600;padding:2px 7px;border-radius:5px;font-family:var(--body)}
 .res.tp{background:var(--up-soft);color:var(--up)} .res.sl{background:var(--down-soft);color:var(--down)} .res.tid{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
 .bt-note{font-size:12px;color:var(--faint);margin-top:14px;max-width:90ch}
+.lab-verdict{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--faint);border-radius:12px;padding:14px 18px;margin-bottom:16px}
+.lab-verdict.good{border-left-color:var(--up)}.lab-verdict.mid{border-left-color:var(--accent)}.lab-verdict.bad{border-left-color:var(--down)}
+.lab-verdict .lv-k{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.lab-verdict h3{margin:2px 0 6px;font-size:18px}
+.lab-verdict ul{margin:0;padding-left:18px;color:var(--muted);font-size:13px}
+.lab-verdict li{margin:2px 0}
 .jr-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:4px}
 .jr-primary{background:var(--ink,#111);color:var(--surface);border-color:transparent}
 .jr-sync{font-size:12px;color:var(--muted);margin-left:auto}
@@ -1289,6 +1295,27 @@ function renderLog(out,hz){
 
 // ---------- strategy lab (results computed by pipeline/strategy_lab.py)
 let labChart=null,labBars='day';
+// The plain-language conclusion at the top of the lab: measured against buy and hold, using only
+// strategies that passed the control period (robust) and their walk-forward results.
+function labVerdict(L){
+  const B=L.benchmark.wf,C=L.champion.wf,pct=v=>v==null?'–':sgn(v)+' %',sh=v=>v==null?'–':f2(v);
+  const rob=L.families.filter(f=>f.id!=='buy_hold'&&f.robust&&f.robust.ok&&f.wf&&f.wf.sharpe!=null).sort((a,b)=>b.wf.sharpe-a.wf.sharpe);
+  const muchBetter=f=>f.wf.sharpe>B.sharpe*1.15&&f.wf.cagr>=B.cagr*.9;
+  const lessFall=f=>f.wf.mdd!=null&&B.mdd!=null&&f.wf.mdd>B.mdd*.85; // at least 15 % smaller largest fall
+  // the most useful robust rule: one that beats buy and hold per risk, else one with about the same
+  // return and smaller falls, else the best per risk
+  const best=rob.find(muchBetter)||rob.find(f=>f.wf.cagr>=B.cagr*.9&&lessFall(f))||rob[0]||null;
+  let head,cls;
+  if(best&&muchBetter(best)){head=`${esc(best.name)} slår köp och behåll per risk`;cls='good'}
+  else if(best&&lessFall(best)){head=`Inget slår köp och behåll tydligt — men ${esc(best.name)} ger ${best.wf.cagr>=B.cagr*.9?'ungefär samma avkastning':'lägre avkastning'} med mindre fall`;cls='mid'}
+  else{head='Inget slår köp och behåll';cls='bad'}
+  const lines=[`<b>Köp och behåll</b>: ${pct(B.cagr)} per år, Sharpe ${sh(B.sharpe)}, största fall ${pct(B.mdd)}.`];
+  for(const f of rob.slice(0,3))lines.push(`<b>${esc(f.name)}</b> (robust): ${pct(f.wf.cagr)} per år, Sharpe ${sh(f.wf.sharpe)}, största fall ${pct(f.wf.mdd)}.`);
+  if(!rob.length)lines.push('Ingen regel var bättre än köp och behåll både i träningen och i kontrollperioden.');
+  if((C.sharpe||0)<(B.sharpe||0))lines.push(`<b>Omvalet</b> — byta till den strategi som gått bäst de senaste två åren — gav Sharpe ${sh(C.sharpe)}: sämre än köp och behåll. Det jagar det som gått bra och byter för sent, och visas längre ned bara som experiment.`);
+  lines.push(L.members?'Urvalet är OMXS30:s nuvarande och tidigare bolag, även de som rasat.':'Urvalet är dagens bolag, vilket gynnar både köp och behåll och strategierna. Skillnader under ca 0,1 i Sharpe ligger inom slumpens marginal.');
+  return {head,cls,lines,best};
+}
 function labTabs(root,weekly,ilTab){
   return `<div class="bt-tabs" role="tablist" aria-label="Data" style="margin-bottom:10px">
     ${root?`<button role="tab" data-labbars="day" aria-selected="${labBars==='day'}">Dagsdata · ${root.period.start.slice(0,4)}–${root.period.end.slice(0,4)}</button>`:''}
@@ -1341,17 +1368,20 @@ function renderLab(){
   const tabs=weekly?`<div class="bt-tabs" role="tablist" aria-label="Data" style="margin-bottom:10px">
       <button role="tab" data-labbars="day" aria-selected="${labBars==='day'}">Dagsdata · ${root.period.start.slice(0,4)}–${root.period.end.slice(0,4)}</button>
       <button role="tab" data-labbars="week" aria-selected="${labBars==='week'}">Veckodata · ${weekly.period.start.slice(0,4)}–${weekly.period.end.slice(0,4)}</button>${ilTab}</div>`:'';
+  const LV=labVerdict(L),R=LV.best;
   out.innerHTML=`${tabs}
+    <div class="lab-verdict ${LV.cls}"><div class="lv-k">Slutsats</div><h3>${LV.head}</h3>
+      <ul>${LV.lines.map(x=>`<li>${x}</li>`).join('')}</ul></div>
     <div class="kpis">
+      ${kp('Köp och behåll',pct(B.wf.cagr),`per år · Sharpe ${sh(B.wf.sharpe)} · största fall ${pct(B.wf.mdd)}`,cls(B.wf.cagr))}
+      ${R?kp('Bästa robusta regel',pct(R.wf.cagr),`${esc(R.name)} · Sharpe ${sh(R.wf.sharpe)} · största fall ${pct(R.wf.mdd)}`,cls(R.wf.cagr)):kp('Bästa robusta regel','–','ingen regel klarade kontrollen')}
+      ${kp('Omval (experiment)',pct(C.wf.cagr),`per år · Sharpe ${sh(C.wf.sharpe)} · största fall ${pct(C.wf.mdd)}`,(C.wf.sharpe||0)>=(B.wf.sharpe||0)?'pos':'neg')}
       ${kp('Testade varianter',L.configs_tested,`${L.families.length} strategier × parametrar`)}
       ${kp('Instrument',L.universe,`kostnad ${f2(L.cost_pct)} % per affär`)}
       ${kp('Period',L.period.start.slice(0,4)+'–'+L.period.end.slice(0,4),`omval från ${L.period.wf_start}`)}
-      ${kp('Mästarens avkastning',pct(C.wf.cagr),`per år · största fall ${pct(C.wf.mdd)}`,cls(C.wf.cagr))}
-      ${kp('Köp och behåll',pct(B.wf.cagr),`per år · största fall ${pct(B.wf.mdd)}`,cls(B.wf.cagr))}
-      ${kp('Sharpe, mästare / köp',sh(C.wf.sharpe)+' / '+sh(B.wf.sharpe),'avkastning per risk',(C.wf.sharpe||0)>=(B.wf.sharpe||0)?'pos':'neg')}
     </div>
     <div class="lab-champ" style="margin-top:20px">
-      <div class="bt-card"><h3 class="sec-t"><span>Mästare just nu: ${esc(C.name)}</span><span>${esc(fmtP(C.params))}</span></h3>
+      <div class="bt-card"><h3 class="sec-t"><span>Omval (experiment) just nu: ${esc(C.name)}</span><span>${esc(fmtP(C.params))}</span></h3>
         <p class="bt-note" style="padding:0 16px;margin-top:4px">Var ${L.period.wf_start?'6:e månad':'period'} väljs den strategi och de inställningar som gått bäst de senaste två åren, och används sedan framåt. Kurvan visar det omvalet som om det gjorts i realtid — jämfört med att köpa och behålla samma instrument.</p>
         <div class="eq" id="lab-eq"></div>
         <h3 class="sec-t" style="padding:0 16px"><span>Mästarens signal i dag</span><span>${inPos.length} köpta${shorts.length?` · ${shorts.length} blankade`:''} av ${C.signals.length}</span></h3>
