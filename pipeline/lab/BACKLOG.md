@@ -24,18 +24,31 @@ och lägg gärna till nya idéer längst ned.
 
 ## Att göra
 
-Ordningen är satt av ägaren (2026-09-23) efter genomgången av labbets första resultat.
+Ordningen är satt av ägaren (2026-10-12) efter fyra veckors resultat: tajmingregler på enskilda aktier
+ger ungefär samma avkastning per risk som köp och behåll, så fokus flyttas till spridning mellan
+tillgångsslag, faktorer och väl studerade säsongsmönster.
 
 - [ ] **Lista utan efterhandsval** — testa på ett urval som inte är valt för att det gått bra, t.ex. alla
       nuvarande och tidigare bolag i OMXS30. Kräver ny datahämtning och ett eget universum i labbet.
+- [ ] **Faber GTAA (trend över tillgångsslag)** — fem tillgångsslag med lika vikt: amerikanska aktier (SPY),
+      internationella aktier (EFA), statsobligationer (IEF), fastigheter (VNQ) och råvaror (DBC). Varje del ägs
+      bara när månadsstängningen ligger över 10-månaders medelvärdet, annars kontant. Källa: Faber 2007,
+      "A Quantitative Approach to Tactical Asset Allocation". Kräver egen datahämtning (som OMXS30-listan)
+      och jämförs mot samma fem tillgångar köpta och behållna.
+- [ ] **Låg volatilitet** — varje månad äg den femtedel av aktierna som svängt minst (standardavvikelse,
+      63 eller 252 dagar), lika vikt. Källor: Blitz & van Vliet 2007; Baker, Bradley & Wurgler 2011.
+- [ ] **Momentum 12–1** — rotation efter avkastningen från 12 månader till 1 månad sedan (senaste månaden
+      hoppas över), topp 5 eller 10, månadsvis. Källa: Jegadeesh & Titman 1993.
 - [ ] **Marknadsregimfilter** — handla bara aktier när deras index (OMXS30 för Norden, SPX för USA)
       ligger över sitt 200-dagars medelvärde. Kombinera med Donchian och RSI(2).
-- [ ] **Keltner-utbrott** — köp stängning över EMA(20) + 2 × ATR(10), sälj under EMA(20).
-- [ ] **Supertrend** — ATR(10) × 3, standardinställning.
+- [ ] **Säsongsmönster** — (a) månadsskiftet: äg index de sista 2 och första 3 handelsdagarna i månaden
+      (Ariel 1987; Lakonishok & Smidt 1988); (b) Sell in May: äg index november–april, kontant maj–oktober
+      (Bouman & Jacobsen 2002). Testas på index och på veckodatan (10 år).
 - [ ] **IBS-rekyl (Internal Bar Strength)** — köp när (stängning − lägsta) / (högsta − lägsta) < 0,2 i upptrend,
       sälj när IBS > 0,8.
-- [ ] **Månadsskiftet (turn of the month)** — äg index de sista 2 och första 3 handelsdagarna i månaden.
-- [ ] **Ichimoku** — pris över molnet och Tenkan över Kijun (9/26/52).
+
+Strukna 2026-10-12: Keltner-utbrott, Supertrend och Ichimoku. De är varianter av samma trendidé som
+Donchian och tidsseriemomentum (redan testade) och skulle främst öka risken att något ser bra ut av slump.
 
 ## Klart
 
