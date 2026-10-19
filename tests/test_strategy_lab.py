@@ -245,5 +245,57 @@ class Members(unittest.TestCase):
         self.assertIn("champion", res)
 
 
+class FaberGTAA(unittest.TestCase):
+    def series(self, closes, start="2015-01-01"):
+        c = pd.Series(closes, index=pd.bdate_range(start, periods=len(closes)), dtype=float)
+        return pd.DataFrame({"o": c, "h": c, "l": c, "c": c})
+
+    def test_signal_changes_only_at_month_ends(self):
+        rng = np.random.default_rng(10)
+        df = self.series(100 * np.cumprod(1 + rng.normal(0.0003, 0.012, 800)))
+        pos = lab.faber_monthly(df, 10)
+        changes = pos.index[pos.diff().fillna(0) != 0]
+        month_end = set(lab.month_ends(df.index))
+        self.assertTrue(len(changes) > 0)
+        self.assertTrue(all(d in month_end for d in changes))
+        self.assertEqual(pos.iloc[:150].sum(), 0)  # no position before ten month-ends exist
+
+    def test_follows_the_ten_month_average(self):
+        up = self.series(np.linspace(100, 200, 400))
+        down = self.series(np.linspace(200, 100, 400))
+        self.assertEqual(lab.faber_monthly(up, 10).iloc[-1], 1.0)
+        self.assertEqual(lab.faber_monthly(down, 10).iloc[-1], 0.0)
+
+    def test_no_look_ahead(self):
+        rng = np.random.default_rng(11)
+        full = self.series(100 * np.cumprod(1 + rng.normal(0.0003, 0.012, 800)))
+        cut = 500
+        later = full.copy()
+        later.iloc[cut:] = later.iloc[cut:] * 0.3  # a crash after day `cut`
+        a, b = lab.faber_monthly(full, 10), lab.faber_monthly(later, 10)
+        pd.testing.assert_series_equal(a.iloc[:cut], b.iloc[:cut])
+
+    def test_each_asset_keeps_its_share_and_cash_when_out(self):
+        # one asset rising, one falling: GTAA holds only the riser, with its 1/2 share; the rest is cash
+        up = self.series(100 * np.cumprod(np.full(600, 1.001)))
+        down = self.series(100 * np.cumprod(np.full(600, 0.999)))
+        rets, pos = lab.strategy_returns({"UP": up, "DOWN": down}, lab.faber_monthly, {"months": 10}, cost_pct=0)
+        r = lab.portfolio(rets)
+        self.assertAlmostEqual(r.iloc[-1], 0.001 / 2, places=6)
+        self.assertEqual(list(pos.iloc[-1][["UP", "DOWN"]]), [1.0, 0.0])
+
+    def test_run_gtaa_reports_assets(self):
+        rng = np.random.default_rng(12)
+        prices = {s: self.series(100 * np.cumprod(1 + rng.normal(0.0003, 0.01, 1200))) for s in ("SPY", "EFA", "IEF", "VNQ")}
+        rows = lab.load_member_list(lab.GTAA_FILE)
+        res = lab.run_gtaa(prices, rows)
+        self.assertEqual({f["id"] for f in res["families"]}, set(lab.GTAA_FAMILIES))
+        self.assertEqual([a["sym"] for a in res["assets"]], ["EFA", "IEF", "SPY", "VNQ"])
+        self.assertEqual(res["missing_assets"], ["DBC"])
+        self.assertEqual(len(rows), 5)
+        for f in lab.GTAA_FAMILIES.values():
+            self.assertLessEqual(len(f["grid"]), 4)
+
+
 if __name__ == "__main__":
     unittest.main()
