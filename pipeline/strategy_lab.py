@@ -329,10 +329,10 @@ def frames_from_json(d: dict) -> dict[str, pd.DataFrame]:
     return out
 
 
-def fetch_members(rows: list[dict], yf) -> dict[str, pd.DataFrame]:
-    """Ten years of daily bars for every member that still has prices on Yahoo."""
+def fetch_members(rows: list[dict], yf, period: str = OMXS30_HISTORY) -> dict[str, pd.DataFrame]:
+    """Daily, dividend-adjusted bars for every row that has prices on Yahoo."""
     tick = {r["yahoo"]: r["sym"] for r in rows if r.get("yahoo")}
-    data = yf.download(list(tick), interval="1d", period=OMXS30_HISTORY, group_by="ticker", auto_adjust=True,
+    data = yf.download(list(tick), interval="1d", period=period, group_by="ticker", auto_adjust=True,
                        threads=True, progress=False)
     out = {}
     for y, sym in tick.items():
@@ -347,9 +347,10 @@ def fetch_members(rows: list[dict], yf) -> dict[str, pd.DataFrame]:
     return out
 
 
-def member_prices(data_dir: Path, rows: list[dict], yf=None, now: datetime | None = None) -> dict[str, pd.DataFrame]:
-    """Prices for the member list, cached in data/lab_omxs30_prices.json and refetched once a day."""
-    cache = data_dir / "lab_omxs30_prices.json"
+def member_prices(data_dir: Path, rows: list[dict], yf=None, now: datetime | None = None,
+                  cache_name: str = "lab_omxs30_prices.json", period: str = OMXS30_HISTORY) -> dict[str, pd.DataFrame]:
+    """Prices for a list of its own (OMXS30 members, the GTAA assets), cached in data/ and refetched once a day."""
+    cache = data_dir / cache_name
     now = now or datetime.now(timezone.utc)
     old = json.loads(cache.read_text(encoding="utf-8")) if cache.exists() else None
     fresh = old and (now - datetime.fromisoformat(old["fetched"])).total_seconds() < OMXS30_MAX_AGE_H * 3600
@@ -357,12 +358,12 @@ def member_prices(data_dir: Path, rows: list[dict], yf=None, now: datetime | Non
         try:
             if yf is None:
                 import yfinance as yf  # noqa: F811
-            got = fetch_members(rows, yf)
+            got = fetch_members(rows, yf, period)
             if got:
                 old = {"fetched": now.isoformat(timespec="seconds"), "prices": frames_to_json(got)}
                 cache.write_text(json.dumps(old, separators=(",", ":")), encoding="utf-8")
         except Exception as e:  # keep the cached prices when the fetch fails
-            print(f"OMXS30-listan: kunde inte hämta kurser ({e})")
+            print(f"{cache_name}: kunde inte hämta kurser ({e})")
     return frames_from_json(old["prices"]) if old else {}
 
 
@@ -374,6 +375,40 @@ def run_members(prices: dict[str, pd.DataFrame], rows: list[dict], cost_pct: flo
         "with_prices": sorted(prices), "former": sorted(s for s in prices if status.get(s) == "tidigare"),
         "missing": [{"sym": r["sym"], "name": r["name"], "status": r["status"]} for r in rows if r["sym"] not in prices],
     }
+    return res
+
+
+# ---------- trend across asset classes (Faber GTAA) ----------
+GTAA_FILE = Path(__file__).resolve().parent.parent / "config" / "lab_gtaa.csv"
+GTAA_HISTORY = "20y"  # back to 2006: includes the 2008 crisis
+
+
+def faber_monthly(df: pd.DataFrame, months: int) -> pd.Series:
+    """Faber (2007): hold the asset for the next month when its month-end close is above the average of
+    the last `months` month-end closes; otherwise cash. Each asset keeps its own equal share."""
+    c = df.c
+    me = c.loc[month_ends(c.index)]
+    sma = me.rolling(months, min_periods=months).mean()
+    sig = (me > sma).astype(float).where(sma.notna(), 0.0)
+    return sig.reindex(c.index).ffill().fillna(0.0)
+
+
+GTAA_FAMILIES = {
+    "buy_hold": dict(FAMILIES["buy_hold"], desc="Äger alla fem tillgångsslagen med lika vikt hela tiden (jämförelse)"),
+    "faber_gtaa": dict(name="Faber GTAA", desc="Varje tillgångsslag (1/5) ägs bara när månadsstängningen ligger över 10- eller 12-månaders medelvärdet, annars kontant (Faber 2007)",
+                       term="Lång", fn=faber_monthly, grid=[{"months": 10}, {"months": 12}]),
+    "price_sma": dict(FAMILIES["price_sma"], grid=[{"n": 200}], desc="Samma idé med dagliga signaler: över 200-dagars medelvärdet"),
+    "tsmom": dict(FAMILIES["tsmom"], grid=[{"lookback": 252}], desc="Äger tillgången när avkastningen senaste 12 månaderna är positiv (Moskowitz m.fl.)"),
+}
+
+
+def run_gtaa(prices: dict[str, pd.DataFrame], rows: list[dict], cost_pct: float = COST_PCT) -> dict:
+    """The lab on the five asset classes, with which assets and since when."""
+    res = run(prices, cost_pct, GTAA_FAMILIES)
+    names = {r["sym"]: (r["name"], r.get("klass", "")) for r in rows}
+    res["assets"] = [{"sym": s, "name": names.get(s, (s, ""))[0], "klass": names.get(s, (s, ""))[1],
+                      "from": str(prices[s].index[0].date())} for s in sorted(prices)]
+    res["missing_assets"] = [r["sym"] for r in rows if r["sym"] not in prices]
     return res
 
 
@@ -605,6 +640,10 @@ def main() -> int:
     members = member_prices(data_dir, rows)
     if len(members) >= 5:
         res["omxs30"] = run_members(members, rows, a.cost)
+    gtaa_rows = load_member_list(GTAA_FILE)
+    assets = member_prices(data_dir, gtaa_rows, cache_name="lab_gtaa_prices.json", period=GTAA_HISTORY)
+    if len(assets) >= 3:
+        res["gtaa"] = run_gtaa(assets, gtaa_rows, a.cost)
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     out = data_dir / "lab.json"
     prev = json.loads(out.read_text(encoding="utf-8")) if out.exists() else {}
@@ -628,6 +667,11 @@ def main() -> int:
         print(f"OMXS30 nuvarande och tidigare: {len(o['members']['with_prices'])} bolag ({len(o['members']['former'])} tidigare), "
               f"{len(o['members']['missing'])} saknar kurser; köp och behåll {o['benchmark']['wf'].get('cagr')} %/år, "
               f"mästare {o['champion']['name']} {o['champion']['wf'].get('cagr')} %/år")
+    if "gtaa" in res:
+        g = res["gtaa"]
+        f = {x["id"]: x for x in g["families"]}["faber_gtaa"]
+        print(f"Faber GTAA {g['period']['start']} – {g['period']['end']}: köp och behåll {g['benchmark']['wf'].get('cagr')} %/år "
+              f"(största fall {g['benchmark']['wf'].get('mdd')} %), GTAA {f['wf'].get('cagr')} %/år (största fall {f['wf'].get('mdd')} %)")
     return 0
 
 

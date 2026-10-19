@@ -28,11 +28,6 @@ Ordningen är satt av ägaren (2026-10-12) efter fyra veckors resultat: tajmingr
 ger ungefär samma avkastning per risk som köp och behåll, så fokus flyttas till spridning mellan
 tillgångsslag, faktorer och väl studerade säsongsmönster.
 
-- [ ] **Faber GTAA (trend över tillgångsslag)** — fem tillgångsslag med lika vikt: amerikanska aktier (SPY),
-      internationella aktier (EFA), statsobligationer (IEF), fastigheter (VNQ) och råvaror (DBC). Varje del ägs
-      bara när månadsstängningen ligger över 10-månaders medelvärdet, annars kontant. Källa: Faber 2007,
-      "A Quantitative Approach to Tactical Asset Allocation". Kräver egen datahämtning (som OMXS30-listan)
-      och jämförs mot samma fem tillgångar köpta och behållna.
 - [ ] **Låg volatilitet** — varje månad äg den femtedel av aktierna som svängt minst (standardavvikelse,
       63 eller 252 dagar), lika vikt. Källor: Blitz & van Vliet 2007; Baker, Bradley & Wurgler 2011.
 - [ ] **Momentum 12–1** — rotation efter avkastningen från 12 månader till 1 månad sedan (senaste månaden
@@ -63,3 +58,5 @@ Donchian och tidsseriemomentum (redan testade) och skulle främst öka risken at
 - [x] Dubbelt momentum (Antonacci) — rotation mellan OMXS30, S&P 500, Nasdaq 100 och guld, 6 och 12 månader.
 - [x] Lista utan efterhandsval — nuvarande och tidigare OMXS30-bolag (`config/lab_omxs30.csv`), tio års
       dagsdata med egen hämtning, labbet körs på listan (`omxs30` i lab.json). Avnoterade bolag utan kurser redovisas.
+- [x] Faber GTAA — fem tillgångsslag (SPY, EFA, IEF, VNQ, DBC, `config/lab_gtaa.csv`), 20 års utdelningsjusterad
+      dagsdata, signal vid månadsskiften mot 10- och 12-månaders medelvärdet (`gtaa` i lab.json).

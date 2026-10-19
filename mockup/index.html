@@ -1313,7 +1313,8 @@ function labVerdict(L){
   for(const f of rob.slice(0,3))lines.push(`<b>${esc(f.name)}</b> (robust): ${pct(f.wf.cagr)} per år, Sharpe ${sh(f.wf.sharpe)}, största fall ${pct(f.wf.mdd)}.`);
   if(!rob.length)lines.push('Ingen regel var bättre än köp och behåll både i träningen och i kontrollperioden.');
   if((C.sharpe||0)<(B.sharpe||0))lines.push(`<b>Omvalet</b> — byta till den strategi som gått bäst de senaste två åren — gav Sharpe ${sh(C.sharpe)}: sämre än köp och behåll. Det jagar det som gått bra och byter för sent, och visas längre ned bara som experiment.`);
-  lines.push(L.members?'Urvalet är OMXS30:s nuvarande och tidigare bolag, även de som rasat.':'Urvalet är dagens bolag, vilket gynnar både köp och behåll och strategierna. Skillnader under ca 0,1 i Sharpe ligger inom slumpens marginal.');
+  lines.push(L.assets?`Urvalet är fem tillgångsslag med lika vikt (${L.assets.map(a=>esc(a.klass||a.sym)).join(', ')}) — utdelningsjusterade ETF:er sedan ${L.assets.map(a=>a.from).sort().pop().slice(0,4)}, med finanskrisen 2008. Kontant ger ingen ränta i testet, vilket missgynnar GTAA något.`
+    :L.members?'Urvalet är OMXS30:s nuvarande och tidigare bolag, även de som rasat.':'Urvalet är dagens bolag, vilket gynnar både köp och behåll och strategierna. Skillnader under ca 0,1 i Sharpe ligger inom slumpens marginal.');
   return {head,cls,lines,best};
 }
 function labTabs(root,weekly,ilTab){
@@ -1352,14 +1353,16 @@ function renderIntraLab(out,IL,root,weekly,ilTab){
 function renderLab(){
   const out=document.getElementById('lab-out');
   if(labChart){labChart.remove();labChart=null}
-  const root=REAL&&REAL.lab,weekly=root&&root.weekly,omx=root&&root.omxs30,IL=REAL&&REAL.intralab&&REAL.intralab.families&&REAL.intralab.families.length?REAL.intralab:null;
+  const root=REAL&&REAL.lab,weekly=root&&root.weekly,omx=root&&root.omxs30,gtaa=root&&root.gtaa,IL=REAL&&REAL.intralab&&REAL.intralab.families&&REAL.intralab.families.length?REAL.intralab:null;
   if(labBars==='week'&&!weekly)labBars='day';
   if(labBars==='omx'&&!omx)labBars='day';
+  if(labBars==='gtaa'&&!gtaa)labBars='day';
   if(labBars==='intra'&&!IL)labBars='day';
   const ilTab=(omx?`<button role="tab" data-labbars="omx" aria-selected="${labBars==='omx'}">OMXS30 utan efterhandsval · ${omx.period.start.slice(0,4)}–${omx.period.end.slice(0,4)}</button>`:'')
+    +(gtaa?`<button role="tab" data-labbars="gtaa" aria-selected="${labBars==='gtaa'}">Tillgångsslag · ${gtaa.period.start.slice(0,4)}–${gtaa.period.end.slice(0,4)}</button>`:'')
     +(IL?`<button role="tab" data-labbars="intra" aria-selected="${labBars==='intra'}">Intradag · ${IL.days} dagar</button>`:'');
   if(labBars==='intra'){renderIntraLab(out,IL,root,weekly,ilTab);return}
-  const L=root&&(labBars==='week'?Object.assign({},weekly,{history:root.history}):labBars==='omx'?Object.assign({},omx,{history:null}):root);
+  const L=root&&(labBars==='week'?Object.assign({},weekly,{history:root.history}):labBars==='omx'?Object.assign({},omx,{history:null}):labBars==='gtaa'?Object.assign({},gtaa,{history:null}):root);
   if(!L){out.innerHTML='<div class="bt-empty">Strategilabbet har inte körts än, eller så är du inte inloggad. Det körs när dagsdatan uppdateras (17:50 och 22:35) och när sidan publiceras om.</div>';return}
   const pct=v=>v==null?'–':sgn(v)+' %',sh=v=>v==null?'–':f2(v),C=L.champion,B=L.benchmark;
   const fmtP=p=>Object.entries(p||{}).map(([k,v])=>`${k} ${v===true?'ja':v===false?'nej':v}`).join(', ')||'–';
