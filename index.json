@@ -394,7 +394,12 @@
 "bars": 16514,
 "complete": true,
 "symbols": 172
+},
+"2026-10-19": {
+"bars": 6278,
+"complete": false,
+"symbols": 107
 }
 },
-"updated": "2026-10-16T20:36:53+00:00"
+"updated": "2026-10-19T11:38:26+00:00"
 }
