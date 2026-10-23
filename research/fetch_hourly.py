@@ -40,10 +40,16 @@ def main() -> int:
         print("SITE_USERS saknas — inget skrivs.")
         return 1
     import yfinance as yf
-    frames = _download(yf, list(SYMBOLS.values()), "60m", "730d")
     data = {}
-    for name, y in SYMBOLS.items():
-        s = frame_to_series(frames.get(y), "60m", 100_000)
+    for name, y in SYMBOLS.items():  # one at a time: a ticker Yahoo answers oddly must not stop the rest
+        s = None
+        try:
+            df = _download(yf, [y], "60m", "730d").get(y)
+            if df is not None and hasattr(df.columns, "nlevels") and df.columns.nlevels > 1:
+                df = df.droplevel(0, axis=1) if y in df.columns.get_level_values(0) else df.droplevel(-1, axis=1)
+            s = frame_to_series(df, "60m", 100_000)
+        except Exception as e:
+            print(f"{name:7} {y:7} fel: {e}")
         if s:
             data[name] = s
         print(f"{name:7} {y:7} {len(s['t']) if s else 0} staplar")
