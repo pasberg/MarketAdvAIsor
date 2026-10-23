@@ -1,0 +1,43 @@
+name: Research fetch
+
+# One-off fetch of two years of hourly bars (research/fetch_hourly.py), encrypted for the
+# SITE_USERS accounts and pushed to the `research` branch. Runs when the script changes, or by hand.
+
+on:
+  push:
+    branches: [claude/blissful-ritchie-s9t3ly]
+    paths:
+      - "research/**"
+      - ".github/workflows/research.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pipeline/requirements.txt
+      - run: pip install -r pipeline/requirements.txt
+      - name: Fetch and encrypt
+        env:
+          SITE_USERS: ${{ secrets.SITE_USERS }}
+        run: python research/fetch_hourly.py --out research_out
+      - name: Push to the research branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd research_out
+          git init -q -b research
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Research data $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" research

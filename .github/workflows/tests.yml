@@ -3,7 +3,7 @@ name: Tests
 on:
   pull_request:
   push:
-    branches-ignore: [gh-pages, journal, archive]
+    branches-ignore: [gh-pages, journal, archive, research]
 
 jobs:
   test:
