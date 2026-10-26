@@ -28,8 +28,6 @@ Ordningen är satt av ägaren (2026-10-12) efter fyra veckors resultat: tajmingr
 ger ungefär samma avkastning per risk som köp och behåll, så fokus flyttas till spridning mellan
 tillgångsslag, faktorer och väl studerade säsongsmönster.
 
-- [ ] **Låg volatilitet** — varje månad äg den femtedel av aktierna som svängt minst (standardavvikelse,
-      63 eller 252 dagar), lika vikt. Källor: Blitz & van Vliet 2007; Baker, Bradley & Wurgler 2011.
 - [ ] **Momentum 12–1** — rotation efter avkastningen från 12 månader till 1 månad sedan (senaste månaden
       hoppas över), topp 5 eller 10, månadsvis. Källa: Jegadeesh & Titman 1993.
 - [ ] **Marknadsregimfilter** — handla bara aktier när deras index (OMXS30 för Norden, SPX för USA)
@@ -60,3 +58,5 @@ Donchian och tidsseriemomentum (redan testade) och skulle främst öka risken at
       dagsdata med egen hämtning, labbet körs på listan (`omxs30` i lab.json). Avnoterade bolag utan kurser redovisas.
 - [x] Faber GTAA — fem tillgångsslag (SPY, EFA, IEF, VNQ, DBC, `config/lab_gtaa.csv`), 20 års utdelningsjusterad
       dagsdata, signal vid månadsskiften mot 10- och 12-månaders medelvärdet (`gtaa` i lab.json).
+- [x] Låg volatilitet — rotation till den lugnaste femtedelen av aktierna vid varje månadsskifte
+      (63 eller 252 dagar; 13 eller 52 veckor), körs även på OMXS30-listan utan efterhandsval.

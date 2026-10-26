@@ -245,6 +245,39 @@ class Members(unittest.TestCase):
         self.assertIn("champion", res)
 
 
+class LowVol(unittest.TestCase):
+    def make(self, n=400, k=10, seed=13):
+        rng = np.random.default_rng(seed)
+        # stock i swings with volatility 0.5 % + i × 0.3 %: S0 and S1 are the calmest fifth
+        return {f"S{i}": frame(100 * np.cumprod(1 + rng.normal(0.0003, 0.005 + i * 0.003, n))) for i in range(k)}
+
+    def test_holds_the_calmest_fifth(self):
+        prices = self.make()
+        pos = lab.low_vol(prices, 63)
+        self.assertEqual(sorted(pos.columns[pos.iloc[-1] == 1]), ["S0", "S1"])
+        self.assertTrue((pos.sum(axis=1).iloc[100:] == 2).all())
+        changes = pos.index[(pos.diff().abs().sum(axis=1) > 0)]
+        self.assertTrue(set(changes) <= set(lab.month_ends(pos.index)))  # rebalanced only at month ends
+
+    def test_a_delisted_stock_is_not_mistaken_for_a_calm_one(self):
+        prices = self.make()
+        gone = prices["S9"].iloc[:200]  # the wildest stock stops trading on day 200
+        prices["S9"] = gone
+        pos = lab.low_vol(prices, 63)
+        self.assertEqual(pos["S9"].iloc[250:].sum(), 0)  # a flat carried-forward price is never chosen
+
+    def test_no_look_ahead(self):
+        prices = self.make()
+        later = {k: v.copy() for k, v in prices.items()}
+        later["S5"].iloc[300:] = later["S5"].iloc[300:] * np.linspace(1, 1.5, 100)[:, None]  # calm S5 later turns wild
+        a, b = lab.low_vol(prices, 63), lab.low_vol(later, 63)
+        pd.testing.assert_frame_equal(a.iloc[:300], b.iloc[:300])
+
+    def test_grids_stay_small(self):
+        self.assertLessEqual(len(lab.FAMILIES["low_vol"]["grid"]), 4)
+        self.assertLessEqual(len(lab.WEEKLY_FAMILIES["low_vol"]["grid"]), 4)
+
+
 class FaberGTAA(unittest.TestCase):
     def series(self, closes, start="2015-01-01"):
         c = pd.Series(closes, index=pd.bdate_range(start, periods=len(closes)), dtype=float)
