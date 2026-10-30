@@ -183,6 +183,24 @@ def xs_momentum(prices, lookback, top):
     return pos.ffill().fillna(0.0)
 
 
+def low_vol(prices, lookback, share=0.2):
+    """Low volatility (Blitz & van Vliet 2007; Baker, Bradley & Wurgler 2011): at each month end hold,
+    in equal parts, the `share` of the stocks whose daily returns varied least over `lookback` days.
+
+    Only stocks that traded that day and have at least 90 % of the window in real prices are ranked:
+    a delisted stock's carried-forward price would otherwise look perfectly calm."""
+    raw = pd.DataFrame({k: v.c for k, v in prices.items() if k not in NON_STOCKS}).sort_index()
+    rets = raw.pct_change(fill_method=None)
+    vol = rets.rolling(lookback, min_periods=int(lookback * 0.9)).std()
+    pos = pd.DataFrame(np.nan, index=raw.index, columns=raw.columns)
+    for d in month_ends(raw.index):
+        v = vol.loc[d][raw.loc[d].notna()].dropna()
+        pos.loc[d] = 0.0
+        if len(v) >= 5:
+            pos.loc[d, v.nsmallest(max(1, int(round(len(v) * share)))).index] = 1.0
+    return pos.ffill().fillna(0.0)
+
+
 def month_ends(index: pd.DatetimeIndex) -> pd.DatetimeIndex:
     s = index.to_series()
     return index[(s.groupby(index.to_period("M")).transform("max") == s).to_numpy()]
@@ -249,6 +267,8 @@ FAMILIES = {
                           term="Medel", fn=chandelier, grid=[{"mult": 3.0}], vol_target=True),
     "vt_tsmom": dict(name="Tidsseriemomentum, volatilitetsstyrd", desc="12-månadersmomentum; portföljen skalas mot 15 % årlig volatilitet (Moskowitz m.fl.)",
                      term="Medel–lång", fn=tsmom, grid=[{"lookback": 252}], vol_target=True),
+    "low_vol": dict(name="Låg volatilitet (rotation)", desc="Äger varje månad, lika viktat, den femtedel av aktierna som svängt minst senaste kvartalet/året (Blitz & van Vliet; Baker m.fl.)",
+                    term="Lång", fn=low_vol, portfolio=True, grid=[{"lookback": lb} for lb in (63, 252)]),
     "xs_momentum": dict(name="Relativ styrka (rotation)", desc="Äger varje månad de aktier som gått bäst senaste halvåret/året, om uppgången är positiv",
                         term="Medel–lång", fn=xs_momentum, portfolio=True,
                         grid=[{"lookback": lb, "top": k} for lb in (126, 252) for k in (5, 10)]),
@@ -271,6 +291,8 @@ WEEKLY_FAMILIES = {
     "donchian": _weekly("donchian", [{"n": 4, "m": 4}, {"n": 20, "m": 10}],
                         desc="Köper nytt N-veckorshögsta, säljer vid M-veckorslägsta (Donchians 4-veckorsregel)"),
     "macd": _weekly("macd", [{"trend_filter": False}], desc="Äger när MACD (12/26/9 veckor) ligger över signallinjen"),
+    "low_vol": _weekly("low_vol", [{"lookback": lb} for lb in (13, 52)],
+                       desc="Äger varje månad, lika viktat, den femtedel av aktierna som svängt minst senaste kvartalet/året (veckoavkastning)"),
     "xs_momentum": _weekly("xs_momentum", [{"lookback": lb, "top": k} for lb in (26, 52) for k in (5, 10)],
                            desc="Äger varje månad de aktier som gått bäst senaste halvåret/året, om uppgången är positiv"),
     "dual_momentum": _weekly("dual_momentum", [{"lookback": lb} for lb in (26, 52)],
