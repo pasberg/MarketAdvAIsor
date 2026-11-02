@@ -245,6 +245,34 @@ class Members(unittest.TestCase):
         self.assertIn("champion", res)
 
 
+class Momentum12_1(unittest.TestCase):
+    def test_skips_the_latest_month(self):
+        # A rose for eleven months and then fell in the last month; B was flat, then jumped in the last month.
+        n = 300
+        a = np.r_[np.linspace(100, 200, n - 21), np.linspace(200, 150, 21)]
+        b = np.r_[np.full(n - 21, 100.0), np.linspace(100, 160, 21)]
+        flat = np.full(n, 100.0)
+        prices = {"A": frame(a), "B": frame(b), "C": frame(flat), "D": frame(flat * 0.9)}
+        d = lab.month_ends(prices["A"].index)[-1]
+        pos = lab.mom_12_1(prices, top=1)
+        self.assertEqual(pos.loc[d:, "A"].iloc[0], 1.0)  # the 12-1 winner, despite its last month
+        self.assertEqual(pos.loc[d:, "B"].iloc[0], 0.0)  # last month's jump does not count
+
+    def test_no_look_ahead_and_delisted(self):
+        rng = np.random.default_rng(14)
+        prices = {f"S{i}": frame(100 * np.cumprod(1 + rng.normal(0.0004, 0.015, 600))) for i in range(8)}
+        later = {k: v.copy() for k, v in prices.items()}
+        later["S3"].iloc[450:] = later["S3"].iloc[450:] * 3
+        a, b = lab.mom_12_1(prices, top=3), lab.mom_12_1(later, top=3)
+        pd.testing.assert_frame_equal(a.iloc[:450], b.iloc[:450])
+        prices["S0"] = prices["S0"].iloc[:300] * np.linspace(1, 5, 300)[:, None]  # soars, then stops trading
+        self.assertEqual(lab.mom_12_1(prices, top=3)["S0"].iloc[330:].sum(), 0)
+
+    def test_grids_stay_small(self):
+        self.assertLessEqual(len(lab.FAMILIES["mom_12_1"]["grid"]), 4)
+        self.assertLessEqual(len(lab.WEEKLY_FAMILIES["mom_12_1"]["grid"]), 4)
+
+
 class LowVol(unittest.TestCase):
     def make(self, n=400, k=10, seed=13):
         rng = np.random.default_rng(seed)

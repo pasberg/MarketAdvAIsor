@@ -28,8 +28,6 @@ Ordningen är satt av ägaren (2026-10-12) efter fyra veckors resultat: tajmingr
 ger ungefär samma avkastning per risk som köp och behåll, så fokus flyttas till spridning mellan
 tillgångsslag, faktorer och väl studerade säsongsmönster.
 
-- [ ] **Momentum 12–1** — rotation efter avkastningen från 12 månader till 1 månad sedan (senaste månaden
-      hoppas över), topp 5 eller 10, månadsvis. Källa: Jegadeesh & Titman 1993.
 - [ ] **Marknadsregimfilter** — handla bara aktier när deras index (OMXS30 för Norden, SPX för USA)
       ligger över sitt 200-dagars medelvärde. Kombinera med Donchian och RSI(2).
 - [ ] **Säsongsmönster** — (a) månadsskiftet: äg index de sista 2 och första 3 handelsdagarna i månaden
@@ -60,3 +58,5 @@ Donchian och tidsseriemomentum (redan testade) och skulle främst öka risken at
       dagsdata, signal vid månadsskiften mot 10- och 12-månaders medelvärdet (`gtaa` i lab.json).
 - [x] Låg volatilitet — rotation till den lugnaste femtedelen av aktierna vid varje månadsskifte
       (63 eller 252 dagar; 13 eller 52 veckor), körs även på OMXS30-listan utan efterhandsval.
+- [x] Momentum 12–1 — rotation till de 5 eller 10 aktier som gått bäst från 12 till 1 månad sedan
+      (52 till 4 veckor på veckodata), körs även på OMXS30-listan utan efterhandsval.

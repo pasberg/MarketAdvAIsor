@@ -183,6 +183,24 @@ def xs_momentum(prices, lookback, top):
     return pos.ffill().fillna(0.0)
 
 
+def mom_12_1(prices, top, lookback=252, skip=21):
+    """Momentum 12-1 (Jegadeesh & Titman 1993): at each month end hold, in equal parts, the `top`
+    stocks with the best return from `lookback` to `skip` bars ago. The latest month is left out,
+    as in the literature, because single months tend to reverse.
+
+    Only stocks that traded that day and had a real price at both ends of the window are ranked
+    (a delisted stock's carried-forward price must not count)."""
+    raw = pd.DataFrame({k: v.c for k, v in prices.items() if k not in NON_STOCKS}).sort_index()
+    mom = raw.shift(skip) / raw.shift(lookback) - 1
+    pos = pd.DataFrame(np.nan, index=raw.index, columns=raw.columns)
+    for d in month_ends(raw.index):
+        m = mom.loc[d][raw.loc[d].notna()].dropna()
+        pos.loc[d] = 0.0
+        if len(m) >= top:
+            pos.loc[d, m.nlargest(top).index] = 1.0
+    return pos.ffill().fillna(0.0)
+
+
 def low_vol(prices, lookback, share=0.2):
     """Low volatility (Blitz & van Vliet 2007; Baker, Bradley & Wurgler 2011): at each month end hold,
     in equal parts, the `share` of the stocks whose daily returns varied least over `lookback` days.
@@ -267,6 +285,8 @@ FAMILIES = {
                           term="Medel", fn=chandelier, grid=[{"mult": 3.0}], vol_target=True),
     "vt_tsmom": dict(name="Tidsseriemomentum, volatilitetsstyrd", desc="12-månadersmomentum; portföljen skalas mot 15 % årlig volatilitet (Moskowitz m.fl.)",
                      term="Medel–lång", fn=tsmom, grid=[{"lookback": 252}], vol_target=True),
+    "mom_12_1": dict(name="Momentum 12–1 (rotation)", desc="Äger varje månad, lika viktat, de 5 eller 10 aktier som gått bäst från 12 till 1 månad sedan (Jegadeesh & Titman)",
+                     term="Medel–lång", fn=mom_12_1, portfolio=True, grid=[{"top": k} for k in (5, 10)]),
     "low_vol": dict(name="Låg volatilitet (rotation)", desc="Äger varje månad, lika viktat, den femtedel av aktierna som svängt minst senaste kvartalet/året (Blitz & van Vliet; Baker m.fl.)",
                     term="Lång", fn=low_vol, portfolio=True, grid=[{"lookback": lb} for lb in (63, 252)]),
     "xs_momentum": dict(name="Relativ styrka (rotation)", desc="Äger varje månad de aktier som gått bäst senaste halvåret/året, om uppgången är positiv",
@@ -291,6 +311,8 @@ WEEKLY_FAMILIES = {
     "donchian": _weekly("donchian", [{"n": 4, "m": 4}, {"n": 20, "m": 10}],
                         desc="Köper nytt N-veckorshögsta, säljer vid M-veckorslägsta (Donchians 4-veckorsregel)"),
     "macd": _weekly("macd", [{"trend_filter": False}], desc="Äger när MACD (12/26/9 veckor) ligger över signallinjen"),
+    "mom_12_1": _weekly("mom_12_1", [{"top": k, "lookback": 52, "skip": 4} for k in (5, 10)],
+                        desc="Äger varje månad, lika viktat, de 5 eller 10 aktier som gått bäst från 52 till 4 veckor sedan"),
     "low_vol": _weekly("low_vol", [{"lookback": lb} for lb in (13, 52)],
                        desc="Äger varje månad, lika viktat, den femtedel av aktierna som svängt minst senaste kvartalet/året (veckoavkastning)"),
     "xs_momentum": _weekly("xs_momentum", [{"lookback": lb, "top": k} for lb in (26, 52) for k in (5, 10)],
