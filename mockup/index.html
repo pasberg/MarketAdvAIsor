@@ -300,6 +300,7 @@ table.wl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
 .lab-verdict h3{margin:2px 0 6px;font-size:18px}
 .lab-verdict ul{margin:0;padding-left:18px;color:var(--muted);font-size:13px}
 .lab-verdict li{margin:2px 0}
+.sl-warn{grid-column:1/-1;background:var(--down-soft);border-radius:8px;padding:6px 10px;font-size:12.5px;color:var(--ink)}
 .jr-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:4px}
 .jr-primary{background:var(--ink,#111);color:var(--surface);border-color:transparent}
 .jr-sync{font-size:12px;color:var(--muted);margin-left:auto}
@@ -911,10 +912,10 @@ function instruments(m){
 }
 
 // ---------- state
-const state={view:'analys',hz:'intradag',mkt:'all',sel:null,ov:{lv:true,fib:true,ew:true,ema:true,vwap:true,vol:true,rsi:true},cap:250000,riskPct:1,ins:null};
+const state={view:'analys',hz:'intradag',mkt:'all',sel:null,ov:{lv:true,fib:true,ew:true,ema:true,vwap:true,vol:true,rsi:true},cap:250000,riskPct:1,ins:null,slk:3,lev:1,ko:''};
 try{const h=location.hash.slice(1);if(HZ[h])state.hz=h;if(h==='backtest')state.view='backtest';if(h==='strategilabb')state.view='lab';if(h==='dagbok')state.view='journal'}catch(e){}
-try{const v=JSON.parse(localStorage.getItem('maa-ui2')||'null');if(v){Object.assign(state.ov,v.ov||{});if(v.cap)state.cap=v.cap;if(v.riskPct)state.riskPct=v.riskPct;if(!HZ[location.hash.slice(1)]&&HZ[v.hz])state.hz=v.hz}}catch(e){}
-const save=()=>{try{localStorage.setItem('maa-ui2',JSON.stringify({ov:state.ov,cap:state.cap,riskPct:state.riskPct,hz:state.hz}))}catch(e){}};
+try{const v=JSON.parse(localStorage.getItem('maa-ui2')||'null');if(v){Object.assign(state.ov,v.ov||{});if(v.cap)state.cap=v.cap;if(v.riskPct)state.riskPct=v.riskPct;if(v.slk)state.slk=v.slk;if(v.lev)state.lev=v.lev;if(!HZ[location.hash.slice(1)]&&HZ[v.hz])state.hz=v.hz}}catch(e){}
+const save=()=>{try{localStorage.setItem('maa-ui2',JSON.stringify({ov:state.ov,cap:state.cap,riskPct:state.riskPct,hz:state.hz,slk:state.slk,lev:state.lev}))}catch(e){}};
 const inMkt=s=>state.mkt==='all'||T[s][5].split(' ').includes(state.mkt);
 
 // ---------- render pieces
@@ -1152,10 +1153,61 @@ function renderDetail(m){
         <label for="ins" class="full">Instrument<select id="ins">${usable.map(x=>`<option value="${x.id}" ${x.id===state.ins?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>
       </div>
       <div class="calc-out" id="calc-out"></div>
+      <h3 class="sec-t" style="margin-top:18px"><span>Stop loss-kalkylator</span><span>ATR · brus · knock-out</span></h3>
+      <div class="calc">
+        <label for="sl-k">Stop-avstånd<select id="sl-k">${[[1,'1 × ATR'],[1.5,'1,5 × ATR'],[2,'2 × ATR'],[3,'3 × ATR (förslag)'],[4,'4 × ATR'],[6,'6 × ATR'],['setup','Setupens SL']].map(([v,l])=>`<option value="${v}" ${String(v)===String(state.slk)?'selected':''}>${l}</option>`).join('')}</select></label>
+        <label for="sl-lev">Hävstång (×)<input id="sl-lev" type="number" min="1" max="50" step="0.5" value="${state.lev}"></label>
+        <label for="sl-ko" class="full">Knock-out-nivå (mini future/turbo, valfritt)<input id="sl-ko" type="number" step="any" placeholder="i underliggandes kurs, t.ex. ${fp(m.s>0?m.lv.entry*0.9:m.lv.entry*1.1)}" value="${esc(state.ko)}"></label>
+      </div>
+      <div class="calc-out" id="sl-out"></div>
       <p class="note">Länkarna öppnar Avanzas produktlistor filtrerade på underliggande och riktning — välj en produkt som uppfyller kriterierna ovan. ${cur!=='SEK'?`Omräknat med 1 ${cur} = ${f2(FX[cur])} SEK. `:''}Förenklat: ignorerar spread, courtage och finansieringskostnad. Warrantens hävstång är en uppskattning.</p>
     </section>
   </div>`;
-  drawChart(m);calc(m);
+  drawChart(m);calc(m);slcalc(m);
+}
+// ---------- stop loss calculator
+// share of intraday entries whose stop was touched before the close, by stop distance in ATR(5 min):
+// measured on the 5-minute archive (Jul–Oct 2026, ~85 000 entries spread over the day, long and short)
+const NOISE_K=[0.5,1,1.5,2,3,4,6];
+const NOISE={nord:[91,83,75,68,55,45,28],usa:[87,75,63,52,35,22,9],index:[88,77,68,59,44,33,17],commodity:[91,83,75,68,56,46,31],fx:[91,81,72,64,50,40,26]};
+const noiseGroup=s=>{const k=kindOf(s);if(k==='index'||k==='commodity'||k==='fx')return k;return EX[T[s][1]]&&EX[T[s][1]].us?'usa':'nord'};
+function noiseHit(s,k){
+  const t=NOISE[noiseGroup(s)];if(k<=NOISE_K[0])return t[0];if(k>=NOISE_K[6])return t[6];
+  for(let i=0;i<6;i++)if(k<=NOISE_K[i+1]){const f=(k-NOISE_K[i])/(NOISE_K[i+1]-NOISE_K[i]);return t[i]+(t[i+1]-t[i])*f}
+}
+// ATR(14): intraday on 5-minute bars (the archive's measure), otherwise on the horizon's own bars
+function atrOf(m){
+  const ser=m.hz==='intradag'&&REAL&&REAL.symbols[m.item.s]&&REAL.symbols[m.item.s].series.intra5;
+  const c=ser?MAA.toCandles(ser,Math.max(0,ser.c.length-16),ser.c.length):m.c.slice(-16);
+  if(c.length<3)return null;
+  let sum=0,n=0;for(let i=1;i<c.length;i++){sum+=Math.max(c[i].high,c[i-1].close)-Math.min(c[i].low,c[i-1].close);n++}
+  return {atr:sum/n,tf:ser?'5 min':tfLabel(m.hz,m.item.s)};
+}
+function slcalc(m){
+  const o=document.getElementById('sl-out');if(!o||!m)return;
+  const A=atrOf(m);if(!A){o.innerHTML='<div><span>För lite kursdata för ATR</span><span></span></div>';return}
+  const s=m.s,e=m.lv.entry,cur=m.t[2],fx=FX[cur]||1,intra=m.hz==='intradag';
+  const setupK=Math.abs(e-m.lv.sl)/A.atr,k=state.slk==='setup'?setupK:+state.slk;
+  const stop=state.slk==='setup'?m.lv.sl:e-s*k*A.atr,dist=Math.abs(e-stop)/e*100;
+  const lev=Math.max(1,+state.lev||1),riskSek=state.cap*state.riskPct/100;
+  const stake=Math.min(state.cap,riskSek/(lev*dist/100)),lossPct=lev*dist;
+  const ko=state.ko===''?null:+state.ko;
+  const warn=[];
+  if(setupK<2)warn.push(`Setupens stop loss (${fp(m.lv.sl)}) ligger bara ${f1(setupK)} × ATR från entry — inom bruset.`);
+  if(ko){
+    const koBeyond=s*(stop-ko); // >0: the knock-out lies beyond the stop
+    if(s*(e-ko)<=0)warn.push('Knock-out-nivån ligger på fel sida om entry — kontrollera riktning och nivå.');
+    else if(koBeyond<=0)warn.push(`<b>Knock-out (${fp(ko)}) ligger före din stop loss</b> — positionen stängs av emittenten innan din stop nås. Välj en produkt med knock-out längre bort, eller lägre hävstång.`);
+    else if(koBeyond<A.atr)warn.push(`Knock-out ligger bara ${f1(koBeyond/A.atr)} × ATR bortom stop loss — en spik genom din stop kan nå knock-out innan ordern fylls.`);
+  }else if(lev>=4)warn.push(`Med hävstång ×${f1(lev)} i en mini future ligger knock-out ungefär ${f1(100/lev)} % från entry (finansieringsnivån) — fyll i nivån ovan för att kontrollera den mot din stop.`);
+  const hit=intra?noiseHit(m.item.s,k):null;
+  o.innerHTML=`<div><span>ATR (${A.tf}, 14 staplar)</span><span class="num">${fp(A.atr)} ${cur} · ${f2(A.atr/e*100)} %</span></div>
+  <div><span>Stop loss</span><span class="num"><b>${fp(stop)}</b> ${cur} · ${f2(dist)} % från entry · ${f1(k)} × ATR</span></div>
+  ${intra?`<div><span>Träffas av slumpen före stängning</span><span class="num ${hit>60?'neg':''}">≈ ${Math.round(hit)} %</span></div>`:''}
+  <div><span>Insats för ${f1(state.riskPct)} % risk</span><span class="num">${nf0.format(stake)} SEK${stake>=state.cap?' <span class="st build">hela kapitalet</span>':''}</span></div>
+  <div><span>${lev>1?`Förlust på produkten vid stop (×${f1(lev)})`:'Förlust vid stop'}</span><span class="num neg">−${f1(lossPct)} % · −${nf0.format(stake*lossPct/100)} SEK</span></div>
+  ${warn.map(w=>`<div class="sl-warn"><span>${w}</span></div>`).join('')}
+  <p class="note" style="grid-column:1/-1;margin:6px 0 0">Stop loss nära entry träffas ofta av vanligt brus, och efteråt går kursen tillbaka ungefär lika ofta som den fortsätter — det är slump, inte stop-jakt. Lägg stop loss där idén är fel (bortom senaste botten/toppen), minst ca 3 × ATR, och låt positionsstorleken — inte stopavståndet — bestämma risken.${intra?' Chansen att träffas gäller ett genomsnitt över dagen; sent på dagen är den lägre.':''} ${cur!=='SEK'?`1 ${cur} = ${f2(fx)} SEK.`:''}</p>`;
 }
 function calc(m){
   const o=document.getElementById('calc-out');if(!o||!m)return;
@@ -1460,10 +1512,13 @@ document.addEventListener('keydown',e=>{const tr=e.target.closest('tr[data-sel]'
 document.addEventListener('change',e=>{
   const ov=e.target.dataset&&e.target.dataset.ov;if(ov){state.ov[ov]=e.target.checked;save();drawChart(current);return}
   if(e.target.id==='ins'){state.ins=e.target.value;calc(current)}
+  if(e.target.id==='sl-k'){state.slk=e.target.value==='setup'?'setup':+e.target.value;save();slcalc(current)}
 });
 document.addEventListener('input',e=>{
-  if(e.target.id==='cap'){state.cap=Math.max(0,+e.target.value||0);save();calc(current)}
-  if(e.target.id==='rp'){state.riskPct=Math.max(0,+e.target.value||0);save();calc(current)}
+  if(e.target.id==='cap'){state.cap=Math.max(0,+e.target.value||0);save();calc(current);slcalc(current)}
+  if(e.target.id==='rp'){state.riskPct=Math.max(0,+e.target.value||0);save();calc(current);slcalc(current)}
+  if(e.target.id==='sl-lev'){state.lev=Math.max(1,+e.target.value||1);save();slcalc(current)}
+  if(e.target.id==='sl-ko'){state.ko=e.target.value.trim();slcalc(current)}
 });
 // redraw chart colors when the theme changes
 try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>drawChart(current))}catch(_){}
