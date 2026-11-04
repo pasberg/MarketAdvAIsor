@@ -24,6 +24,11 @@ och lägg gärna till nya idéer längst ned.
 
 ## Att göra
 
+**Pausad 2026-11-04 av ägaren.** Veckoagenten är avstängd efter Faber GTAA, låg volatilitet och
+momentum 12–1. Slutsatsen efter dem: ingen regel ger både högre avkastning och lägre risk än köp och
+behåll; trend över tillgångsslag och låg volatilitet ger mindre fall, momentum högre avkastning med
+större fall. Punkterna nedan ligger kvar om agenten slås på igen.
+
 Ordningen är satt av ägaren (2026-10-12) efter fyra veckors resultat: tajmingregler på enskilda aktier
 ger ungefär samma avkastning per risk som köp och behåll, så fokus flyttas till spridning mellan
 tillgångsslag, faktorer och väl studerade säsongsmönster.
