@@ -819,10 +819,10 @@ def trade(state: dict | None, cfg: dict, universe: dict, prices: dict, fund: dic
 
 
 VARIANTS = [
-    ("USA v3: två veckor", {"limits": {"hold_days": 10}}),
-    ("USA v4: tre veckor", {}),
-    ("USA v4, köpgräns 75", {"signals": {"entry_score": 75}}),
-    ("USA v4 med valutakonto (0,2 %/order)", {"costs": {"stock_pct_per_order": 0.2}}),
+    ("USA v4: köpgräns 70", {"signals": {"entry_score": 70}}),
+    ("USA v5: köpgräns 75", {}),
+    ("USA v5 med valutakonto (0,2 %/order)", {"costs": {"stock_pct_per_order": 0.2}}),
+    ("USA v5, köpgräns 80, valutakonto", {"signals": {"entry_score": 80}, "costs": {"stock_pct_per_order": 0.2}}),
 ]
 
 
@@ -926,7 +926,7 @@ def main() -> int:
             fund_file.write_text(json.dumps(fund), encoding="utf-8")
             n_ana = sum(1 for f in fund.values() if f.get("analysts"))
             print(f"Nyckeltal: {len(fund)} bolag, {n_ana} med analytikerhistorik, fel: {sum(1 for f in fund.values() if f.get('error'))}")
-            se_u = load_se_universe()
+            se_u = load_se_universe() if os.environ.get("PF_RESEARCH_SE") else {}
             se_prices = fetch_prices(se_u, SE_BENCH)
             se_fund_file = data / "pf_fund_se.json"
             se_cache = json.loads(se_fund_file.read_text(encoding="utf-8")) if se_fund_file.exists() else {}
@@ -934,7 +934,7 @@ def main() -> int:
             se_fund_file.write_text(json.dumps(se_fund), encoding="utf-8")
             print(f"Sverige: {len(se_prices['bars'])} instrument med kurser, {sum(1 for f in se_fund.values() if f.get('events'))} med rapporter, "
                   f"{sum(1 for f in se_fund.values() if f.get('analysts'))} med analytikerhistorik")
-            out = research(cfg, universe, prices, fund, now, se=(se_u, se_prices, se_fund))
+            out = research(cfg, universe, prices, fund, now, se=(se_u, se_prices, se_fund) if se_u else None)
             if isinstance(store, Path):
                 (data / "pf_research.json").write_text(json.dumps(out), encoding="utf-8")
             else:
