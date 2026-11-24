@@ -125,6 +125,39 @@ class PortfolioEngine(unittest.TestCase):
         self.assertEqual(m.fa_comps("S01", 661)["ups"], 1)
         self.assertIn("value", m.scores(650)["S01"]["comp"])
 
+    def test_risk_reward(self):
+        prices, universe, fund, days = market(n=700)
+        for f in fund.values():  # three analysts set a 300 target in the last 90 days
+            f["analysts"] += [[days[640], "main", 300.0, 290.0], [days[645], "main", 300.0, 290.0], [days[648], "main", 300.0, 290.0]]
+        m = pf.Market(prices, universe, fund, CFG)
+        r = m.rr("S01", 650, 1)
+        c, atr = m.s["S01"].c[650], m.s["S01"].atr[650]
+        self.assertAlmostEqual(r["rr"], (r["ref"] - c) / (CFG["stops"]["atr_mult"] * atr), places=1)
+        self.assertIsNone(m.rr("S01", 300, 1))  # too few targets then
+        hi = pf.Market(prices, universe, fund, pf.merged(CFG, {"signals": {"rr_source": "high"}})).rr("S01", 650, 1)
+        self.assertGreaterEqual(hi["rr"], 0)
+        # a minimum R/R only lets trades through that meet it
+        cfg = pf.merged(CFG, {"signals": {"min_rr": 1.5}})
+        st = pf.new_state(cfg, days[600])
+        st["nav"] = []
+        m2 = pf.Market(prices, universe, fund, cfg)
+        pf.step(st, m2, 600, cfg, first=True)
+        for i in range(601, 700):
+            pf.step(st, m2, i, cfg)
+        for t in st["trades"]:
+            self.assertGreaterEqual(t["rr"], 1.5)
+
+    def test_profit_target_exit(self):
+        cfg = pf.merged(CFG, {"stops": {"target_r": 1}})
+        prices, universe, fund, days = market(n=500)
+        m = pf.Market(prices, universe, fund, cfg)
+        st = pf.new_state(cfg, days[250])
+        st["nav"] = []
+        pf.step(st, m, 250, cfg, first=True)
+        for i in range(251, 500):
+            pf.step(st, m, i, cfg)
+        self.assertTrue(any(t["why_out"].startswith("Mål nått") for t in st["trades"]))
+
     def test_trade_start_and_resume(self):
         prices, universe, fund, days = market(n=300)
         now = datetime.strptime(days[280], "%Y-%m-%d").replace(hour=22, tzinfo=timezone.utc)

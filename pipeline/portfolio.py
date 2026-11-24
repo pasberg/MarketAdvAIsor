@@ -172,7 +172,7 @@ class Series:
                 if k >= 14:
                     rsi[k] = 100.0 if lo == 0 else 100 - 100 / (1 + g / lo)
         self.atr, self.rsi, self.sma50, self.sma200, self.idx = ([None] * self.n for _ in range(5))
-        self.own_c = oc
+        self.own_c, self.own_h = oc, oh
         pos = {d: k for k, d in enumerate(own)}
         ptr = -1
         for i, d in enumerate(days):
@@ -275,6 +275,11 @@ class Market:
                 if v:
                     rows.append((d, v))
             self.ana[s] = (sorted(rows), [r[0] for r in sorted(rows)])
+        # analysts' price targets as set (date, target), for the reward side of risk/reward
+        self.targets = {}
+        for s in self.events:
+            t = sorted((d, cur) for d, _, cur, _ in (fund.get(s) or {}).get("analysts") or [] if cur)
+            self.targets[s] = (t, [x[0] for x in t])
         self.pos = {d: i for i, d in enumerate(self.days)}
 
     def fx_at(self, sym: str, i: int) -> float:
@@ -363,6 +368,33 @@ class Market:
             out["downs"] = sum(1 for _, v in win if v < 0)
             out["revisions"] = clip(sum(v for _, v in win) / sig["revision_full"])
         return out
+
+    def rr(self, s: str, i: int, side: int) -> dict | None:
+        """Reward / risk at the close of day i. Risk: the stop distance (atr_mult x ATR). Reward, by
+        signals.rr_source: 'analyst' = mean of the price targets set in the last rr_target_days, or
+        'high' = distance to the highest price of the last year."""
+        sig, ser = self.cfg["signals"], self.s[s]
+        c, atr = ser.c[i], ser.atr[i]
+        if not c or not atr:
+            return None
+        risk = self.cfg["stops"]["atr_mult"] * atr
+        src = sig.get("rr_source", "analyst")
+        if src == "analyst":
+            rows, dates = self.targets.get(s, ([], []))
+            if not dates:
+                return None
+            import bisect
+            d = self.days[i]
+            lo = (datetime.strptime(d, "%Y-%m-%d") - timedelta(days=sig.get("rr_target_days", 90))).strftime("%Y-%m-%d")
+            win = [t for _, t in rows[bisect.bisect_right(dates, lo):bisect.bisect_right(dates, d)]]
+            if len(win) < 3:
+                return None
+            ref = sum(win) / len(win)
+        else:
+            k = ser.idx[i]
+            ref = max(ser.own_h[max(0, k - 251):k + 1]) if side > 0 else min(ser.own_c[max(0, k - 251):k + 1])
+        reward = (ref - c) * side
+        return {"rr": round(reward / risk, 2), "ref": round(ref, 2), "src": src}
 
     def earnings_comp(self, s: str, i: int):
         sig = self.cfg["signals"]
@@ -461,7 +493,8 @@ def step(state: dict, m: Market, i: int, cfg: dict, keep_log: bool = True, first
             t = {"id": p["id"], "sym": p["sym"], "side": p["side"], "kind": p["kind"], "cert": p["cert"], "lev": p["lev"],
                  "N": round(p["N"]), "open_d": p["d"], "p0": p["p0"], "close_d": d, "p1": px, "days": p["held"],
                  "pnl": round(pnl), "ret_pct": round(pnl / p["N"] * 100, 2), "cost": round(cost + p["cost_in"] + p["fin"]),
-                 "why_in": p["why"], "why_out": o["why"], "type": p["type"], "score_in": p["score"]}
+                 "why_in": p["why"], "why_out": o["why"], "type": p["type"], "score_in": p["score"],
+                 "comp": p.get("comp"), "rr": p.get("rr")}
             state["trades"].append(t)
             day_log["fills"].append({"sym": p["sym"], "action": "stäng", "side": p["side"], "price": px, "pnl": round(pnl), "why": o["why"]})
         else:
@@ -475,7 +508,8 @@ def step(state: dict, m: Market, i: int, cfg: dict, keep_log: bool = True, first
             k = cfg["stops"]["atr_mult"]
             p = {"id": state["seq"], "sym": o["sym"], "kind": o["kind"], "cert": o["cert"], "side": o["side"], "lev": o["lev"],
                  "N": o["N"], "p0": px, "fx0": fx, "d": d, "atr0": atr, "stop": px - o["side"] * k * atr,
-                 "best": px, "held": 0, "cost_in": cost, "fin": 0.0, "why": o["why"], "type": o["type"], "score": o["score"]}
+                 "best": px, "held": 0, "cost_in": cost, "fin": 0.0, "why": o["why"], "type": o["type"], "score": o["score"],
+                 "comp": o.get("comp"), "rr": o.get("rr")}
             state["positions"].append(p)
             day_log["fills"].append({"sym": o["sym"], "action": "köp" if o["side"] > 0 else "blanka", "side": o["side"],
                                      "price": px, "N": round(o["N"]), "lev": o["lev"], "why": o["why"]})
@@ -516,6 +550,8 @@ def step(state: dict, m: Market, i: int, cfg: dict, keep_log: bool = True, first
         side_score = None if s is None else (s["score"] if p["side"] > 0 else 100 - s["score"])
         if (c - p["stop"]) * p["side"] <= 0:
             exits.append((0, p, f"Stopp: stängde {fmt_px(c)} {'under' if p['side'] > 0 else 'över'} stoppen {fmt_px(p['stop'])}"))
+        elif cfg["stops"].get("target_r") and (c - p["p0"]) * p["side"] >= cfg["stops"]["target_r"] * k_atr(cfg, p):
+            exits.append((0.5, p, f"Mål nått: {cfg['stops']['target_r']:g} R ({fmt_px(c)})"))
         elif side_score is not None and side_score < sig["exit_score"] and p["held"] >= lim["min_hold_days"]:
             exits.append((1, p, f"Signalen har vänt: poäng {side_score:.0f} (under {sig['exit_score']})"))
         elif p["held"] >= lim["hold_days"]:
@@ -553,7 +589,14 @@ def step(state: dict, m: Market, i: int, cfg: dict, keep_log: bool = True, first
                 ne = m.next_earnings(s, i)
                 if ne is not None and ne <= sig["no_entry_days_before_earnings"]:
                     why_not = f"rapport om {ne} handelsdagar"
-            cands.append({"sym": s, "side": side, "score": ss, "x": x, "why_not": why_not})
+            rr = m.rr(s, i, side) if u["kind"] == "stock" else None
+            if not why_not and sig.get("min_rr"):
+                if rr is None:
+                    if sig.get("rr_require", True):
+                        why_not = "risk/reward okänd (för få riktkurser)" if sig.get("rr_source", "analyst") == "analyst" else "risk/reward okänd"
+                elif rr["rr"] < sig["min_rr"]:
+                    why_not = f"risk/reward {rr['rr']:.1f} (under {sig['min_rr']:g})"
+            cands.append({"sym": s, "side": side, "score": ss, "x": dict(x, rr=rr), "why_not": why_not})
     cands.sort(key=lambda c: -c["score"])
     nav_now = nav
     for c in cands:
@@ -582,7 +625,8 @@ def step(state: dict, m: Market, i: int, cfg: dict, keep_log: bool = True, first
                                      "why": o["why"], **({"N": round(o["N"]), "lev": o["lev"]} if o["action"] == "open" else {})})
     if keep_log:
         top = lambda side: [{"sym": c["sym"], "score": c["score"], "comp": c["x"]["comp"], "mom": c["x"]["mom_pct"], "rsi": c["x"]["rsi"],
-                             "atr": c["x"]["atr_pct"], "event": c["x"]["event"], "why_not": c["why_not"]}
+                             "atr": c["x"]["atr_pct"], "event": c["x"]["event"], "why_not": c["why_not"],
+                             "rr": (c["x"].get("rr") or {}).get("rr")}
                             for c in cands if c["side"] == side][:8]
         day_log.update({"nav": round(nav), "bench": round(state["bench"]), "bench_r": round(m.bench_r[i] * 100, 2),
                         "n_scored": len(sc), "n_long": sum(c["side"] > 0 for c in cands), "n_short": sum(c["side"] < 0 for c in cands),
@@ -636,13 +680,16 @@ def size_order(cfg: dict, m: Market, c: dict, nav: float) -> dict:
         parts.append(f"analytiker {cfg['signals']['revision_days']} d: {fa.get('ups', 0)} upp, {fa.get('downs', 0)} ned")
     if fa.get("pe"):
         parts.append(f"P/E {fa['pe']:.0f}")
+    if x.get("rr"):
+        r = x["rr"]
+        parts.append(f"risk/reward {r['rr']:.1f} ({'riktkurs' if r['src'] == 'analyst' else 'årshögsta'} {fmt_px(r['ref'])})")
     parts.append(f"momentum 3 mån {x['mom_pct']:+.1f} %")
     parts.append({1: "över 50 och 200 dagars snitt", -1: "under 50 och 200 dagars snitt"}.get(round(comp["trend"]), f"trend {comp['trend']:+.2f}"))
     if "quality" in comp:
         parts.append(f"nyckeltal {comp['quality']:+.2f}")
     vehicle = "aktien" if not cert else (f"mini short ×{lev:g}" if kind == "stock" else f"{'bull' if side > 0 else 'bear'}/mini ×{lev:g}")
     return {"action": "open", "sym": s, "side": side, "kind": kind, "cert": cert, "lev": lev, "N": N, "atr": x["atr_pct"] / 100 * x["close"],
-            "score": c["score"], "type": typ, "why": f"{'Köp' if side > 0 else 'Blanka'} via {vehicle}: " + "; ".join(parts)}
+            "score": c["score"], "type": typ, "comp": comp, "rr": (x.get("rr") or {}).get("rr"), "why": f"{'Köp' if side > 0 else 'Blanka'} via {vehicle}: " + "; ".join(parts)}
 
 
 # ---------------------------------------------------------------- runs
@@ -819,10 +866,13 @@ def trade(state: dict | None, cfg: dict, universe: dict, prices: dict, fund: dic
 
 
 VARIANTS = [
-    ("USA v4: köpgräns 70", {"signals": {"entry_score": 70}}),
-    ("USA v5: köpgräns 75", {}),
-    ("USA v5 med valutakonto (0,2 %/order)", {"costs": {"stock_pct_per_order": 0.2}}),
-    ("USA v5, köpgräns 80, valutakonto", {"signals": {"entry_score": 80}, "costs": {"stock_pct_per_order": 0.2}}),
+    ("v5 (nu)", {}),
+    ("R/R ≥ 2 mot riktkurs", {"signals": {"min_rr": 2, "rr_source": "analyst"}}),
+    ("R/R ≥ 3 mot riktkurs", {"signals": {"min_rr": 3, "rr_source": "analyst"}}),
+    ("R/R ≥ 1 mot årshögsta", {"signals": {"min_rr": 1, "rr_source": "high", "rr_require": False}}),
+    ("Sälj vid 2 R (vinstmål)", {"stops": {"target_r": 2}}),
+    ("Sälj vid 3 R (vinstmål)", {"stops": {"target_r": 3}}),
+    ("R/R ≥ 2 mot riktkurs + sälj vid 2 R", {"signals": {"min_rr": 2, "rr_source": "analyst"}, "stops": {"target_r": 2}}),
 ]
 
 
