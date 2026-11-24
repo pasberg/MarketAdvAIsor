@@ -801,15 +801,27 @@ def trade(state: dict | None, cfg: dict, universe: dict, prices: dict, fund: dic
     return state, msgs
 
 
+LONG_STOCKS = {"signals": {"short_min_market_cap_usd": 1e18}, "limits": {"max_fx_positions": 0, "max_index_positions": 0}}
+FA_NO_PEAD = {"growth": 0.25, "revisions": 0.25, "beats": 0.15, "value": 0.10, "momentum": 0.15, "trend": 0.10}
+
+
+def _v(*parts):
+    out = {}
+    for p in parts:
+        out = merged(out, p)
+    return out
+
+
 VARIANTS = [
     ("v1: 40 % FA (rapport + nyckeltal)", {"signals": {"weights_stock": {"earnings": 0.40, "momentum": 0.30, "trend": 0.20}}}),
     ("v2: 65 % FA", {}),
-    ("v2, köpgräns 80", {"signals": {"entry_score": 80}}),
-    ("v2 utan hävstång", {"sizing": {"max_leverage": 1.0}}),
-    ("v2 bara aktier", {"limits": {"max_fx_positions": 0, "max_index_positions": 0}}),
-    ("v2 bara FA (ingen teknik)", {"signals": {"weights_stock": {"earnings": 0.20, "growth": 0.15, "revisions": 0.15, "beats": 0.10, "value": 0.05}},
-                                   "limits": {"max_fx_positions": 0, "max_index_positions": 0}}),
-    ("v2 bara köp, bara aktier", {"signals": {"short_min_market_cap_usd": 1e18}, "limits": {"max_fx_positions": 0, "max_index_positions": 0}}),
+    ("v2 bara köp, bara aktier", LONG_STOCKS),
+    ("v2 bara köp, aktier, gräns 80", lambda: _v(LONG_STOCKS, {"signals": {"entry_score": 80}})),
+    ("FA utan rapportreaktion, bara köp aktier", lambda: _v(LONG_STOCKS, {"signals": {"weights_stock": FA_NO_PEAD}})),
+    ("d:o, gräns 75", lambda: _v(LONG_STOCKS, {"signals": {"weights_stock": FA_NO_PEAD, "entry_score": 75}})),
+    ("d:o, gräns 75, USD-konto (0,2 %/order)", lambda: _v(LONG_STOCKS, {"signals": {"weights_stock": FA_NO_PEAD, "entry_score": 75},
+                                                                          "costs": {"stock_pct_per_order": 0.2}})),
+    ("v2 bara köp aktier, USD-konto", lambda: _v(LONG_STOCKS, {"costs": {"stock_pct_per_order": 0.2}})),
 ]
 
 
@@ -827,6 +839,7 @@ def research(cfg, universe, prices, fund, now) -> dict:
     """The same backtest for rule variants, so a change can be judged before it goes live."""
     res = []
     for name, over in VARIANTS:
+        over = over() if callable(over) else over
         c = merged(cfg, over)
         try:
             m = Market(prices, universe, fund, c, use_quality=False)
