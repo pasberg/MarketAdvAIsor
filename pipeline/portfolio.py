@@ -45,7 +45,7 @@ def load_universe(path: Path = UNIVERSE_FILE) -> dict[str, dict]:
     out = {}
     with path.open(encoding="utf-8", newline="") as f:
         for r in csv.DictReader(f):
-            out[r["sym"]] = {"name": r["name"], "yahoo": r["yahoo"], "kind": r["kind"], "tags": r["tags"],
+            out[r["sym"]] = {"name": r["name"], "yahoo": r["yahoo"], "kind": r["kind"], "tags": r["tags"], "currency": r.get("currency") or "USD",
                              "avanza_name": r.get("avanza_name") or ""}
     return out
 
@@ -258,6 +258,8 @@ class Market:
         for i in range(1, len(self.days)):
             r = sum(w * (bars[b][self.days[i]][4] / bars[b][self.days[i - 1]][4] - 1) for b, w in parts.items())
             f0, f1 = self.fx.c[i - 1], self.fx.c[i]
+            if cfg["benchmark"].get("currency", "USD") != "USD":
+                f0 = f1 = None  # a Swedish index fund: no currency effect
             self.bench_r[i] = (1 + r) * (f1 / f0 if f0 and f1 else 1) - 1
         self.qqq = Series(self.days, bars[base[0]])
         self.events = {s: earnings_events(fund.get(s) or {}, self.days) for s, u in self.universe.items() if u["kind"] == "stock"}
@@ -276,7 +278,8 @@ class Market:
         self.pos = {d: i for i, d in enumerate(self.days)}
 
     def fx_at(self, sym: str, i: int) -> float:
-        return (self.fx.c[i] or 1.0) if self.universe[sym]["kind"] == "stock" else 1.0
+        u = self.universe[sym]
+        return (self.fx.c[i] or 1.0) if u["kind"] == "stock" and u.get("currency", "USD") == "USD" else 1.0
 
     def scores(self, i: int) -> dict[str, dict]:
         """Long score 0-100 per instrument at the close of day i (short score = 100 - score)."""
@@ -816,12 +819,31 @@ def trade(state: dict | None, cfg: dict, universe: dict, prices: dict, fund: dic
 
 
 VARIANTS = [
-    ("v2: 65 % FA, köp och blankning, alla slag", {"signals": {"allow_short": True, "weights_stock": {"earnings": 0.20, "growth": 0.15, "revisions": 0.15, "beats": 0.10, "value": 0.05, "momentum": 0.20, "trend": 0.15}},
-                                                   "limits": {"max_fx_positions": 3, "max_index_positions": 3}}),
-    ("v3: bara köp av aktier, 75 % FA", {}),
-    ("v3 med köpgräns 75", {"signals": {"entry_score": 75}}),
-    ("v3 med USD-konto (0,2 %/order)", {"costs": {"stock_pct_per_order": 0.2}}),
-    ("v3 som blankar också", {"signals": {"allow_short": True}}),
+    ("USA v3: två veckor", {"limits": {"hold_days": 10}}),
+    ("USA v4: tre veckor", {}),
+    ("USA v4, köpgräns 75", {"signals": {"entry_score": 75}}),
+    ("USA v4 med valutakonto (0,2 %/order)", {"costs": {"stock_pct_per_order": 0.2}}),
+]
+
+
+SE_BENCH = ["XACT-OMXS30.ST", "^OMX"]  # the OMXS30 index fund with dividends, else the price index
+
+
+def load_se_universe() -> dict:
+    """Stockholm-listed stocks from the site's universe (config/universe.csv)."""
+    out = {}
+    with (ROOT / "config" / "universe.csv").open(encoding="utf-8", newline="") as f:
+        for r in csv.DictReader(f):
+            if r["kind"] == "stock" and r["currency"] == "SEK" and r["exchange"] == "Stockholm":
+                out[r["sym"]] = {"name": r["name"], "yahoo": r["yahoo"], "kind": "stock", "tags": "se", "currency": "SEK",
+                                 "avanza_name": r.get("avanza_name") or ""}
+    return out
+
+
+SE_VARIANTS = [
+    ("Sverige: samma regler", {}),
+    ("Sverige: köpgräns 75", {"signals": {"entry_score": 75}}),
+    ("Sverige: bara teknik (momentum + trend)", {"signals": {"weights_stock": {"momentum": 0.6, "trend": 0.4}}}),
 ]
 
 
@@ -835,7 +857,7 @@ def merged(cfg: dict, over: dict) -> dict:
     return out
 
 
-def research(cfg, universe, prices, fund, now) -> dict:
+def research(cfg, universe, prices, fund, now, se=None) -> dict:
     """The same backtest for rule variants, so a change can be judged before it goes live."""
     res = []
     for name, over in VARIANTS:
@@ -853,6 +875,26 @@ def research(cfg, universe, prices, fund, now) -> dict:
         except Exception as e:
             res.append({"name": name, "error": str(e)})
             print(f"{name}: fel {e}")
+    if se:
+        se_u, se_prices, se_fund = se
+        bars = se_prices["bars"]
+        bench = next((b for b in SE_BENCH if b in bars), None)
+        for name, over in SE_VARIANTS:
+            c = merged(cfg, over)
+            c["benchmark"] = {"name": f"OMXS30 ({bench})", "parts": {bench: 1.0}, "currency": "SEK"}
+            c["costs"] = dict(c["costs"], stock_pct_per_order=0.15)  # Avanza courtage, no currency exchange
+            try:
+                m = Market(se_prices, se_u, se_fund, c, use_quality=False)
+                end = m.days[-1]
+                start_i = next(i for i in range(len(m.days)) if i >= 210 and m.days[i] >= (datetime.strptime(end, "%Y-%m-%d") - timedelta(days=730)).strftime("%Y-%m-%d"))
+                r = run_backtest(m, c, start_i)
+                r.pop("curve", None)
+                res.append({"name": name, "over": over, "bench": bench, **r})
+                print(f"{name}: {r['portfolio']['total_pct']} % (index {r['benchmark']['total_pct']} %), t {r['tracking_t']}, "
+                      f"{r['trades']} affärer, kostnad {r['costs_sek']} kr")
+            except Exception as e:
+                res.append({"name": name, "error": str(e)})
+                print(f"{name}: fel {e}")
     return {"run": now.isoformat(), "variants": res}
 
 
@@ -884,7 +926,15 @@ def main() -> int:
             fund_file.write_text(json.dumps(fund), encoding="utf-8")
             n_ana = sum(1 for f in fund.values() if f.get("analysts"))
             print(f"Nyckeltal: {len(fund)} bolag, {n_ana} med analytikerhistorik, fel: {sum(1 for f in fund.values() if f.get('error'))}")
-            out = research(cfg, universe, prices, fund, now)
+            se_u = load_se_universe()
+            se_prices = fetch_prices(se_u, SE_BENCH)
+            se_fund_file = data / "pf_fund_se.json"
+            se_cache = json.loads(se_fund_file.read_text(encoding="utf-8")) if se_fund_file.exists() else {}
+            se_fund = fetch_fundamentals(se_u, se_cache, now)
+            se_fund_file.write_text(json.dumps(se_fund), encoding="utf-8")
+            print(f"Sverige: {len(se_prices['bars'])} instrument med kurser, {sum(1 for f in se_fund.values() if f.get('events'))} med rapporter, "
+                  f"{sum(1 for f in se_fund.values() if f.get('analysts'))} med analytikerhistorik")
+            out = research(cfg, universe, prices, fund, now, se=(se_u, se_prices, se_fund))
             if isinstance(store, Path):
                 (data / "pf_research.json").write_text(json.dumps(out), encoding="utf-8")
             else:

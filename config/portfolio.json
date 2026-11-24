@@ -1,6 +1,6 @@
 {
   "_doc": "Regler för den virtuella portföljen (pipeline/portfolio.py). Ändras via PR; varje ändring höjer version och gäller framåt, aldrig retroaktivt.",
-  "version": 3,
+  "version": 4,
   "start_capital": 1000000,
   "start_date": "2026-11-24",
   "limits": {
@@ -9,7 +9,7 @@
     "max_positions": 20,
     "max_fx_positions": 0,
     "max_index_positions": 0,
-    "hold_days": 10,
+    "hold_days": 15,
     "min_hold_days": 2
   },
   "benchmark": {
