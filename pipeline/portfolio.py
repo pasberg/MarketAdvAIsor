@@ -540,8 +540,12 @@ def step(state: dict, m: Market, i: int, cfg: dict, keep_log: bool = True, first
                 why_not = f"överköpt (RSI {x['rsi']:.0f})"
             elif side < 0 and x["rsi"] is not None and x["rsi"] < sig["rsi_min_short"]:
                 why_not = f"översåld (RSI {x['rsi']:.0f})"
+            elif side < 0 and not sig.get("allow_short", True):
+                why_not = "blankning avstängd i reglerna"
             elif side < 0 and u["kind"] == "stock" and (m.info.get(s, {}).get("marketCap") or 0) < sig["short_min_market_cap_usd"]:
                 why_not = "för litet bolag för mini short/bear"
+            elif u["kind"] != "stock" and lim.get(f"max_{u['kind']}_positions", 1) == 0:
+                why_not = "valutor och index avstängda i reglerna"
             elif u["kind"] == "stock":
                 ne = m.next_earnings(s, i)
                 if ne is not None and ne <= sig["no_entry_days_before_earnings"]:
@@ -608,7 +612,7 @@ def size_order(cfg: dict, m: Market, c: dict, nav: float) -> dict:
     w = cfg["signals"]["weights_stock"]
     fa_part = sum(w.get(k, 0) * comp.get(k, 0) for k in FA_KEYS) * side
     ta_part = sum(w.get(k, 0) * comp.get(k, 0) for k in ("momentum", "trend")) * side
-    if kind == "stock" and abs(comp.get("earnings", 0)) >= 0.25:
+    if kind == "stock" and "earnings" in w and abs(comp.get("earnings", 0)) >= 0.25:
         typ = "rapport"
     elif kind == "stock" and fa_part > ta_part:
         typ = "fundamenta"
@@ -778,7 +782,17 @@ def trade(state: dict | None, cfg: dict, universe: dict, prices: dict, fund: dic
         step(state, m, m.pos[days[-1]], cfg, first=True)
         msgs.append(f"Portföljen startad {days[-1]} med {_sv(state['capital0'])} kr.")
     if state.get("rules_version") != cfg["version"]:
-        state.setdefault("changes", []).append({"d": state["last_day"], "from": state.get("rules_version"), "to": cfg["version"]})
+        # unfilled entries the new rules no longer allow are cancelled (exits always stay)
+        def allowed(o):
+            if o["action"] != "open":
+                return True
+            if o["side"] < 0 and not cfg["signals"].get("allow_short", True):
+                return False
+            return o["kind"] == "stock" or cfg["limits"].get(f"max_{o['kind']}_positions", 1) > 0
+        cancelled = [o["sym"] for o in state["pending"] if not allowed(o)]
+        state["pending"] = [o for o in state["pending"] if allowed(o)]
+        state.setdefault("changes", []).append({"d": state["last_day"], "from": state.get("rules_version"), "to": cfg["version"],
+                                                "cancelled": cancelled})
         state["rules_version"] = cfg["version"]
     todo = [d for d in days if d > state["last_day"]]
     for d in todo:
@@ -801,27 +815,13 @@ def trade(state: dict | None, cfg: dict, universe: dict, prices: dict, fund: dic
     return state, msgs
 
 
-LONG_STOCKS = {"signals": {"short_min_market_cap_usd": 1e18}, "limits": {"max_fx_positions": 0, "max_index_positions": 0}}
-FA_NO_PEAD = {"growth": 0.25, "revisions": 0.25, "beats": 0.15, "value": 0.10, "momentum": 0.15, "trend": 0.10}
-
-
-def _v(*parts):
-    out = {}
-    for p in parts:
-        out = merged(out, p)
-    return out
-
-
 VARIANTS = [
-    ("v1: 40 % FA (rapport + nyckeltal)", {"signals": {"weights_stock": {"earnings": 0.40, "momentum": 0.30, "trend": 0.20}}}),
-    ("v2: 65 % FA", {}),
-    ("v2 bara köp, bara aktier", LONG_STOCKS),
-    ("v2 bara köp, aktier, gräns 80", lambda: _v(LONG_STOCKS, {"signals": {"entry_score": 80}})),
-    ("FA utan rapportreaktion, bara köp aktier", lambda: _v(LONG_STOCKS, {"signals": {"weights_stock": FA_NO_PEAD}})),
-    ("d:o, gräns 75", lambda: _v(LONG_STOCKS, {"signals": {"weights_stock": FA_NO_PEAD, "entry_score": 75}})),
-    ("d:o, gräns 75, USD-konto (0,2 %/order)", lambda: _v(LONG_STOCKS, {"signals": {"weights_stock": FA_NO_PEAD, "entry_score": 75},
-                                                                          "costs": {"stock_pct_per_order": 0.2}})),
-    ("v2 bara köp aktier, USD-konto", lambda: _v(LONG_STOCKS, {"costs": {"stock_pct_per_order": 0.2}})),
+    ("v2: 65 % FA, köp och blankning, alla slag", {"signals": {"allow_short": True, "weights_stock": {"earnings": 0.20, "growth": 0.15, "revisions": 0.15, "beats": 0.10, "value": 0.05, "momentum": 0.20, "trend": 0.15}},
+                                                   "limits": {"max_fx_positions": 3, "max_index_positions": 3}}),
+    ("v3: bara köp av aktier, 75 % FA", {}),
+    ("v3 med köpgräns 75", {"signals": {"entry_score": 75}}),
+    ("v3 med USD-konto (0,2 %/order)", {"costs": {"stock_pct_per_order": 0.2}}),
+    ("v3 som blankar också", {"signals": {"allow_short": True}}),
 ]
 
 

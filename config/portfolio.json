@@ -1,14 +1,14 @@
 {
   "_doc": "Regler för den virtuella portföljen (pipeline/portfolio.py). Ändras via PR; varje ändring höjer version och gäller framåt, aldrig retroaktivt.",
-  "version": 2,
+  "version": 3,
   "start_capital": 1000000,
   "start_date": "2026-11-24",
   "limits": {
     "max_orders_per_day": 5,
     "max_position_pct": 5.0,
     "max_positions": 20,
-    "max_fx_positions": 3,
-    "max_index_positions": 3,
+    "max_fx_positions": 0,
+    "max_index_positions": 0,
     "hold_days": 10,
     "min_hold_days": 2
   },
@@ -31,13 +31,12 @@
   },
   "signals": {
     "weights_stock": {
-      "earnings": 0.2,
-      "growth": 0.15,
-      "revisions": 0.15,
-      "beats": 0.1,
-      "value": 0.05,
-      "momentum": 0.2,
-      "trend": 0.15
+      "growth": 0.25,
+      "revisions": 0.25,
+      "beats": 0.15,
+      "value": 0.1,
+      "momentum": 0.15,
+      "trend": 0.1
     },
     "weights_cert": {
       "momentum": 0.6,
@@ -57,10 +56,11 @@
     "rsi_min_short": 22,
     "no_entry_days_before_earnings": 10,
     "short_min_market_cap_usd": 150000000000,
-    "_doc_weights": "Aktier: 65 % fundamenta (rapportreaktion, vinsttillväxt, analytikerflöde, rapportträffar, värdering) och 35 % teknik (momentum, trend). Alla delar har datum, så de går att backtesta utan att se framåt.",
+    "_doc_weights": "v3: bara köp av aktier. 75 % fundamenta (vinsttillväxt, analytikerflöde, rapportträffar, värdering), 25 % teknik (momentum, trend). Rapportreaktionen togs bort: den förlorade i alla backtest. Blankning, valutor och index är avstängda (förlorade i backtestet 2024–2026); max_fx/index_positions och allow_short slås på igen om marknaden vänder nedåt.",
     "growth_full_pct": 25,
     "revision_days": 45,
-    "revision_full": 4
+    "revision_full": 4,
+    "allow_short": false
   },
   "stops": {
     "atr_mult": 2.5,
