@@ -1,6 +1,6 @@
 {
   "_doc": "Regler för den virtuella portföljen (pipeline/portfolio.py). Ändras via PR; varje ändring höjer version och gäller framåt, aldrig retroaktivt.",
-  "version": 1,
+  "version": 2,
   "start_capital": 1000000,
   "start_date": "2026-11-24",
   "limits": {
@@ -12,10 +12,16 @@
     "hold_days": 10,
     "min_hold_days": 2
   },
-  "benchmark": {"name": "50 % Nasdaq-100 + 50 % Dow Jones (indexfond, SEK)", "parts": {"QQQ": 0.5, "DIA": 0.5}},
+  "benchmark": {
+    "name": "50 % Nasdaq-100 + 50 % Dow Jones (indexfond, SEK)",
+    "parts": {
+      "QQQ": 0.5,
+      "DIA": 0.5
+    }
+  },
   "costs": {
-    "stock_pct_per_order": 0.40,
-    "cert_pct_per_order": 0.20,
+    "stock_pct_per_order": 0.4,
+    "cert_pct_per_order": 0.2,
     "financing_pct_year": 3.0
   },
   "sizing": {
@@ -24,11 +30,25 @@
     "max_leverage": 5.0
   },
   "signals": {
-    "weights_stock": {"earnings": 0.40, "momentum": 0.30, "trend": 0.20, "quality": 0.10},
-    "weights_cert": {"momentum": 0.60, "trend": 0.40},
+    "weights_stock": {
+      "earnings": 0.2,
+      "growth": 0.15,
+      "revisions": 0.15,
+      "beats": 0.1,
+      "value": 0.05,
+      "momentum": 0.2,
+      "trend": 0.15
+    },
+    "weights_cert": {
+      "momentum": 0.6,
+      "trend": 0.4
+    },
     "momentum_days": 63,
     "momentum_skip": 5,
-    "earnings_window": [0, 8],
+    "earnings_window": [
+      0,
+      8
+    ],
     "surprise_full_pct": 10,
     "reaction_full_pct": 5,
     "entry_score": 70,
@@ -36,7 +56,14 @@
     "rsi_max_long": 78,
     "rsi_min_short": 22,
     "no_entry_days_before_earnings": 10,
-    "short_min_market_cap_usd": 150000000000
+    "short_min_market_cap_usd": 150000000000,
+    "_doc_weights": "Aktier: 65 % fundamenta (rapportreaktion, vinsttillväxt, analytikerflöde, rapportträffar, värdering) och 35 % teknik (momentum, trend). Alla delar har datum, så de går att backtesta utan att se framåt.",
+    "growth_full_pct": 25,
+    "revision_days": 45,
+    "revision_full": 4
   },
-  "stops": {"atr_mult": 2.5, "trailing": true}
+  "stops": {
+    "atr_mult": 2.5,
+    "trailing": true
+  }
 }

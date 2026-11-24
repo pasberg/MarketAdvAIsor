@@ -7,6 +7,10 @@ name: Portfolio
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "trade (handla) eller research (jämför regelvarianter i backtest)"
+        default: "trade"
   schedule:
     - cron: "25 21 * * 1-5"
     - cron: "40 23 * * 1-5"
@@ -43,9 +47,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SITE_USERS: ${{ secrets.SITE_USERS }}
-        run: python pipeline/portfolio.py --data data --mode trade
+        run: python pipeline/portfolio.py --data data --mode "${{ github.event.inputs.mode || 'trade' }}"
 
       - name: Publish (with fresh daily bars after the US close)
+        if: (github.event.inputs.mode || 'trade') == 'trade'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SITE_USERS: ${{ secrets.SITE_USERS }}

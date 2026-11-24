@@ -45,7 +45,10 @@ def market(n=400, n_stocks=30, seed=1):
         for q in range(60, n, 63):
             ts = datetime.strptime(days[q], "%Y-%m-%d").replace(hour=21, tzinfo=timezone.utc)
             evs.append({"ts": ts.isoformat(), "est": 1.0, "eps": 1.1, "surprise": 10.0 if k % 2 else -10.0})
-        fund[s] = {"events": evs, "info": {"marketCap": 5e11, "recommendationMean": 2.0}}
+        for e, q in zip(evs, range(len(evs))):
+            e["eps"] = 1.0 + 0.05 * q * (1 if k % 2 else -1)  # odd stocks grow, even shrink
+        ana = [[days[q], "up" if k % 2 else "down", 110.0, 100.0] for q in range(100, n, 40)]
+        fund[s] = {"events": evs, "info": {"marketCap": 5e11, "recommendationMean": 2.0}, "analysts": ana}
     universe["IDX"] = {"name": "Index", "yahoo": "^IDX", "kind": "index", "tags": "index", "avanza_name": "IDX"}
     bars["IDX"] = walk(days, seed + 7, drift=0.0008, vol=0.01)
     universe["FX1"] = {"name": "FX", "yahoo": "FX=X", "kind": "fx", "tags": "fx", "avanza_name": "FX"}
@@ -109,6 +112,18 @@ class PortfolioEngine(unittest.TestCase):
         self.assertEqual(ev["days_since"], 2)
         self.assertEqual(m.earnings_comp("S01", 270)[0], 0.0)  # outside the window
         self.assertEqual(m.next_earnings("S01", 300), 12)
+
+    def test_fundamentals_are_dated(self):
+        prices, universe, fund, days = market(n=700)
+        m = pf.Market(prices, universe, fund, CFG)
+        f = m.fa_comps("S01", 650)
+        self.assertGreater(f["growth"], 0)
+        self.assertGreater(m.fa_comps("S01", 650)["eps_g_pct"], 0)
+        self.assertLess(m.fa_comps("S02", 650)["growth"], 0)
+        # an analyst upgrade on day 660 is not known on day 650
+        self.assertEqual(m.fa_comps("S01", 659)["ups"], 0)  # 620 is outside the 45-day window
+        self.assertEqual(m.fa_comps("S01", 661)["ups"], 1)
+        self.assertIn("value", m.scores(650)["S01"]["comp"])
 
     def test_trade_start_and_resume(self):
         prices, universe, fund, days = market(n=300)

@@ -35,7 +35,9 @@ UNIVERSE_FILE = ROOT / "config" / "portfolio_universe.csv"
 NY = ZoneInfo("America/New_York")
 STATE_FILE = "state.enc.json"
 BACKTEST_MAX_AGE_DAYS = 6
+FUND_VERSION = 2  # bump when fetch_fundamentals stores new fields (forces a refetch)
 CERT_KINDS = {"index", "fx"}
+FA_KEYS = ("earnings", "beats", "growth", "revisions", "value", "quality")
 
 
 # ---------------------------------------------------------------- universe and data
@@ -97,9 +99,10 @@ def fetch_fundamentals(universe: dict, cache: dict, now: datetime) -> dict:
     today = now.strftime("%Y-%m-%d")
     out = dict(cache)
     for sym, u in universe.items():
-        if u["kind"] != "stock" or (out.get(sym) or {}).get("fetched") == today:
+        old = out.get(sym) or {}
+        if u["kind"] != "stock" or (old.get("fetched") == today and old.get("fv") == FUND_VERSION):
             continue
-        rec = {"fetched": today, "events": [], "info": {}}
+        rec = {"fetched": today, "fv": FUND_VERSION, "events": [], "info": {}, "analysts": []}
         try:
             t = yf.Ticker(u["yahoo"])
             ed = t.get_earnings_dates(limit=16)
@@ -107,6 +110,15 @@ def fetch_fundamentals(universe: dict, cache: dict, now: datetime) -> dict:
                 for ts, r in ed.iterrows():
                     rec["events"].append({"ts": ts.isoformat(), "est": _num(r.get("EPS Estimate")),
                                           "eps": _num(r.get("Reported EPS")), "surprise": _num(r.get("Surprise(%)"))})
+            ud = t.upgrades_downgrades
+            if ud is not None and len(ud):
+                cut = (now - timedelta(days=1100)).strftime("%Y-%m-%d")
+                for ts, r in ud.iterrows():
+                    d = ts.strftime("%Y-%m-%d")
+                    if d >= cut:
+                        rec["analysts"].append([d, str(r.get("Action") or ""), _num(r.get("currentPriceTarget")),
+                                                _num(r.get("priorPriceTarget"))])
+                rec["analysts"].sort()
             info = t.info or {}
             rec["info"] = {k: _num(info.get(k)) for k in ("marketCap", "recommendationMean", "forwardPE", "trailingPE",
                                                           "earningsGrowth", "revenueGrowth", "profitMargins")}
@@ -250,6 +262,17 @@ class Market:
         self.qqq = Series(self.days, bars[base[0]])
         self.events = {s: earnings_events(fund.get(s) or {}, self.days) for s, u in self.universe.items() if u["kind"] == "stock"}
         self.info = {s: (fund.get(s) or {}).get("info") or {} for s in self.universe}
+        # analyst actions as dated scores: up/down +-1, raised/cut price target +-0.5
+        self.ana = {}
+        for s in self.events:
+            rows = []
+            for d, act, cur, prior in (fund.get(s) or {}).get("analysts") or []:
+                v = {"up": 1.0, "down": -1.0}.get(act, 0.0)
+                if cur and prior and cur != prior:
+                    v += 0.5 if cur > prior else -0.5
+                if v:
+                    rows.append((d, v))
+            self.ana[s] = (sorted(rows), [r[0] for r in sorted(rows)])
         self.pos = {d: i for i, d in enumerate(self.days)}
 
     def fx_at(self, sym: str, i: int) -> float:
@@ -268,6 +291,9 @@ class Market:
             mom[s] = r
         stocks = sorted((s for s in mom if self.universe[s]["kind"] == "stock"), key=lambda s: mom[s])
         rank = {s: (k + 0.5) / len(stocks) for k, s in enumerate(stocks)}
+        fa = {s: self.fa_comps(s, i) for s in stocks}
+        ey = sorted((s for s in stocks if fa[s].get("ey") is not None), key=lambda s: fa[s]["ey"])
+        ey_rank = {s: (k + 0.5) / len(ey) for k, s in enumerate(ey)}
         for s in mom:
             ser, u = self.s[s], self.universe[s]
             c, a, b = ser.c[i], ser.sma50[i], ser.sma200[i]
@@ -275,7 +301,13 @@ class Market:
             if u["kind"] == "stock":
                 comp["momentum"] = 2 * rank[s] - 1
                 comp["earnings"], ev = self.earnings_comp(s, i)
-                if self.use_quality:
+                f = fa[s]
+                for k in ("beats", "growth", "revisions"):
+                    if f.get(k) is not None:
+                        comp[k] = f[k]
+                if s in ey_rank:
+                    comp["value"] = 2 * ey_rank[s] - 1
+                if self.use_quality and "quality" in sig["weights_stock"]:
                     q = quality(self.info.get(s))
                     if q is not None:
                         comp["quality"] = q
@@ -290,7 +322,43 @@ class Market:
             raw = sum(w[k] * comp[k] for k in comp if k in w) / tw if tw else 0
             out[s] = {"score": round(50 + 50 * raw, 1), "comp": {k: round(v, 2) for k, v in comp.items()},
                       "mom_pct": round(mom[s] * 100, 1), "atr_pct": round(ser.atr[i] / c * 100, 2),
-                      "rsi": round(ser.rsi[i], 0) if ser.rsi[i] is not None else None, "close": c, "event": ev}
+                      "rsi": round(ser.rsi[i], 0) if ser.rsi[i] is not None else None, "close": c, "event": ev,
+                      "fa": {k: v for k, v in (fa.get(s) or {}).items() if k in ("eps_g_pct", "pe", "ups", "downs", "avg_surprise")} or None}
+        return out
+
+    def fa_comps(self, s: str, i: int) -> dict:
+        """Fundamentals known at the close of day i: reported quarters and dated analyst actions."""
+        sig = self.cfg["signals"]
+        d = self.days[i]
+        evs = [e for e in self.events.get(s, []) if e["reported"] and e["react"] and e["react"] <= d]
+        out = {}
+        sur = [e["surprise"] for e in evs[-4:] if e["surprise"] is not None]
+        if len(sur) >= 2:
+            out["avg_surprise"] = round(sum(sur) / len(sur), 1)
+            out["beats"] = clip(out["avg_surprise"] / sig["surprise_full_pct"])
+        eps = [e["eps"] for e in evs]
+        if len(eps) >= 8:
+            ttm, prev = sum(eps[-4:]), sum(eps[-8:-4])
+            if prev > 0:
+                g = ttm / prev - 1
+                out["eps_g_pct"] = round(g * 100, 1)
+                out["growth"] = clip(g * 100 / sig["growth_full_pct"])
+            else:
+                out["growth"] = 0.5 if ttm > prev else -0.5
+        if len(eps) >= 4:
+            ttm = sum(eps[-4:])
+            c = self.s[s].c[i]
+            if c:
+                out["ey"] = ttm / c
+                out["pe"] = round(c / ttm, 1) if ttm > 0 else None
+        rows, dates = self.ana.get(s, ([], []))
+        if dates:
+            import bisect
+            lo = (datetime.strptime(d, "%Y-%m-%d") - timedelta(days=sig["revision_days"])).strftime("%Y-%m-%d")
+            win = rows[bisect.bisect_right(dates, lo):bisect.bisect_right(dates, d)]
+            out["ups"] = sum(1 for _, v in win if v > 0)
+            out["downs"] = sum(1 for _, v in win if v < 0)
+            out["revisions"] = clip(sum(v for _, v in win) / sig["revision_full"])
         return out
 
     def earnings_comp(self, s: str, i: int):
@@ -537,8 +605,13 @@ def size_order(cfg: dict, m: Market, c: dict, nav: float) -> dict:
         lev, shrink = 1.0, min(1.0, tgt / atr_pct)
     N = nav * cfg["limits"]["max_position_pct"] / 100 * shrink
     comp = x["comp"]
+    w = cfg["signals"]["weights_stock"]
+    fa_part = sum(w.get(k, 0) * comp.get(k, 0) for k in FA_KEYS) * side
+    ta_part = sum(w.get(k, 0) * comp.get(k, 0) for k in ("momentum", "trend")) * side
     if kind == "stock" and abs(comp.get("earnings", 0)) >= 0.25:
         typ = "rapport"
+    elif kind == "stock" and fa_part > ta_part:
+        typ = "fundamenta"
     elif kind == "stock":
         typ = "momentum"
     else:
@@ -547,6 +620,15 @@ def size_order(cfg: dict, m: Market, c: dict, nav: float) -> dict:
     if x["event"]:
         e = x["event"]
         parts.append(f"rapport {e['date']}: överraskning {e['surprise']:+.1f} %, kursreaktion {e['reaction']:+.1f} % mot Nasdaq")
+    fa = x.get("fa") or {}
+    if fa.get("eps_g_pct") is not None:
+        parts.append(f"vinst/aktie 12 mån {fa['eps_g_pct']:+.0f} % mot året innan")
+    if fa.get("avg_surprise") is not None:
+        parts.append(f"snittöverraskning 4 kv {fa['avg_surprise']:+.1f} %")
+    if fa.get("ups") or fa.get("downs"):
+        parts.append(f"analytiker {cfg['signals']['revision_days']} d: {fa.get('ups', 0)} upp, {fa.get('downs', 0)} ned")
+    if fa.get("pe"):
+        parts.append(f"P/E {fa['pe']:.0f}")
     parts.append(f"momentum 3 mån {x['mom_pct']:+.1f} %")
     parts.append({1: "över 50 och 200 dagars snitt", -1: "under 50 och 200 dagars snitt"}.get(round(comp["trend"]), f"trend {comp['trend']:+.2f}"))
     if "quality" in comp:
@@ -719,10 +801,52 @@ def trade(state: dict | None, cfg: dict, universe: dict, prices: dict, fund: dic
     return state, msgs
 
 
+VARIANTS = [
+    ("v1: 40 % FA (rapport + nyckeltal)", {"signals": {"weights_stock": {"earnings": 0.40, "momentum": 0.30, "trend": 0.20}}}),
+    ("v2: 65 % FA", {}),
+    ("v2, köpgräns 80", {"signals": {"entry_score": 80}}),
+    ("v2 utan hävstång", {"sizing": {"max_leverage": 1.0}}),
+    ("v2 bara aktier", {"limits": {"max_fx_positions": 0, "max_index_positions": 0}}),
+    ("v2 bara FA (ingen teknik)", {"signals": {"weights_stock": {"earnings": 0.20, "growth": 0.15, "revisions": 0.15, "beats": 0.10, "value": 0.05}},
+                                   "limits": {"max_fx_positions": 0, "max_index_positions": 0}}),
+    ("v2 bara köp, bara aktier", {"signals": {"short_min_market_cap_usd": 1e18}, "limits": {"max_fx_positions": 0, "max_index_positions": 0}}),
+]
+
+
+def merged(cfg: dict, over: dict) -> dict:
+    out = json.loads(json.dumps(cfg))
+    for k, v in over.items():
+        if isinstance(v, dict) and k != "weights_stock":
+            out[k] = merged(out.get(k, {}), v)
+        else:
+            out[k] = v
+    return out
+
+
+def research(cfg, universe, prices, fund, now) -> dict:
+    """The same backtest for rule variants, so a change can be judged before it goes live."""
+    res = []
+    for name, over in VARIANTS:
+        c = merged(cfg, over)
+        try:
+            m = Market(prices, universe, fund, c, use_quality=False)
+            end = completed_days(m.days, now)[-1]
+            start_i = next(i for i in range(len(m.days)) if i >= 210 and m.days[i] >= (datetime.strptime(end, "%Y-%m-%d") - timedelta(days=730)).strftime("%Y-%m-%d"))
+            r = run_backtest(m, c, start_i)
+            r.pop("curve", None)
+            res.append({"name": name, "over": over, **r})
+            print(f"{name}: {r['portfolio']['total_pct']} % (index {r['benchmark']['total_pct']} %), t {r['tracking_t']}, "
+                  f"{r['trades']} affärer, kostnad {r['costs_sek']} kr")
+        except Exception as e:
+            res.append({"name": name, "error": str(e)})
+            print(f"{name}: fel {e}")
+    return {"run": now.isoformat(), "variants": res}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--data", default="data")
-    ap.add_argument("--mode", choices=["trade", "export"], default="export")
+    ap.add_argument("--mode", choices=["trade", "export", "research"], default="export")
     a = ap.parse_args()
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from encrypt_data import parse_users
@@ -739,6 +863,24 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         store = open_store(token, repo, Path(tmp), data / "portfolio_state.json")
         state = load_state(store, users)
+        if a.mode == "research":
+            prices = fetch_prices(universe, list(cfg["benchmark"]["parts"]))
+            fund_file = data / "pf_fund.json"
+            cache = json.loads(fund_file.read_text(encoding="utf-8")) if fund_file.exists() else {}
+            fund = fetch_fundamentals(universe, cache, now)
+            fund_file.write_text(json.dumps(fund), encoding="utf-8")
+            n_ana = sum(1 for f in fund.values() if f.get("analysts"))
+            print(f"Nyckeltal: {len(fund)} bolag, {n_ana} med analytikerhistorik, fel: {sum(1 for f in fund.values() if f.get('error'))}")
+            out = research(cfg, universe, prices, fund, now)
+            if isinstance(store, Path):
+                (data / "pf_research.json").write_text(json.dumps(out), encoding="utf-8")
+            else:
+                import intraday_archive as ia
+                key = ia.archive_key(store, users)
+                store.write("research.enc.json", ia.pack(key, out))
+                store.write("auth.json", ia.wrap_key(key, users))
+                store.commit_and_push(f"Portföljforskning {now:%Y-%m-%d %H:%M}Z")
+            return 0
         if a.mode == "trade":
             ny = now.astimezone(NY)
             if state and state["last_day"] >= expected_last_session(ny):
