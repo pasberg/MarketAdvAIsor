@@ -27,6 +27,10 @@ if [[ "$parts" == *daily* ]]; then
   # intraday strategies on the archive
   python pipeline/intraday_lab.py --data data || echo "::warning::Intradagslabbet misslyckades"
 fi
+# virtual portfolio: page data from the stored state (trading itself runs in portfolio.yml)
+if [[ "$parts" == *daily* ]] || [ ! -f data/portfolio.json ]; then
+  python pipeline/portfolio.py --data data --mode export || echo "::warning::Portföljen kunde inte exporteras"
+fi
 # trading journals synced from the page (journal branch) -> encrypted site data
 python pipeline/journal_export.py data/journal.json || echo "::warning::Dagboken kunde inte exporteras"
 

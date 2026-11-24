@@ -336,6 +336,13 @@ table.wl{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
 .sig-list span.in{background:var(--up-soft);color:var(--up);border-color:transparent}
 .sig-list span.out{color:var(--faint)}
 .sig-list span.short{background:var(--down-soft);color:var(--down);border-color:transparent}
+.pf-rules{margin:10px 0 14px;padding:0 16px 0 34px;font-size:13px;color:var(--muted);line-height:1.55}.pf-rules li{margin:4px 0}.pf-rules b{color:var(--ink)}
+.pf-list{margin:8px 0 14px;padding:0 16px 0 34px;font-size:13px;line-height:1.5}.pf-list li{margin:3px 0}
+.pf-log{padding:4px 16px 14px}.pf-day{border-top:1px solid var(--line-2);padding:8px 0;font-size:13px}.pf-day summary{cursor:pointer;color:var(--muted)}.pf-day summary b{color:var(--ink)}
+.pf-day h4{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:12px 0 4px}.pf-day ul{margin:0;padding-left:18px;line-height:1.5}
+.pf-nm{color:var(--faint);font-size:11.5px}.pf-why{font-family:var(--body)!important;text-align:left!important;font-size:12px;color:var(--muted);min-width:280px;max-width:520px}
+.pf-cand td:nth-child(3){font-size:11.5px;white-space:nowrap}
+.pf .bt-tbl td{white-space:nowrap}.pf .bt-tbl td.pf-why{white-space:normal}
 .ok-flag{font-size:11px;font-weight:600;padding:2px 7px;border-radius:5px;background:var(--up-soft);color:var(--up);white-space:nowrap}
 .no-flag{font-size:11px;font-weight:600;padding:2px 7px;border-radius:5px;background:var(--surface-2);color:var(--muted);border:1px solid var(--line);white-space:nowrap}
 .lab-tbl td:not(:nth-child(2)){white-space:nowrap}
@@ -390,6 +397,7 @@ body.locked .top,body.locked main{filter:blur(7px) saturate(.7);pointer-events:n
       <a href="#backtest" data-view="backtest">Backtest</a>
       <a href="#strategilabb" data-view="lab">Strategilabb</a>
       <a href="#dagbok" data-view="journal">Dagbok</a>
+      <a href="#portfolj" data-view="portfolio">Portfölj</a>
       <a href="#metod" id="nav-metod">Metod</a>
     </nav>
     <div class="top-meta">
@@ -446,6 +454,8 @@ body.locked .top,body.locked main{filter:blur(7px) saturate(.7);pointer-events:n
   </section>
 
   <section class="lab" id="lab" hidden><div id="lab-out"></div></section>
+
+  <section class="pf" id="pf" hidden><div id="pf-out"></div></section>
 
   <section class="jr" id="journal" hidden>
     <div id="jr-out"></div>
@@ -913,7 +923,7 @@ function instruments(m){
 
 // ---------- state
 const state={view:'analys',hz:'intradag',mkt:'all',sel:null,ov:{lv:true,fib:true,ew:true,ema:true,vwap:true,vol:true,rsi:true},cap:250000,riskPct:1,ins:null,slk:3,lev:1,ko:''};
-try{const h=location.hash.slice(1);if(HZ[h])state.hz=h;if(h==='backtest')state.view='backtest';if(h==='strategilabb')state.view='lab';if(h==='dagbok')state.view='journal'}catch(e){}
+try{const h=location.hash.slice(1);if(HZ[h])state.hz=h;if(h==='backtest')state.view='backtest';if(h==='strategilabb')state.view='lab';if(h==='dagbok')state.view='journal';if(h==='portfolj')state.view='portfolio'}catch(e){}
 try{const v=JSON.parse(localStorage.getItem('maa-ui2')||'null');if(v){Object.assign(state.ov,v.ov||{});if(v.cap)state.cap=v.cap;if(v.riskPct)state.riskPct=v.riskPct;if(v.slk)state.slk=v.slk;if(v.lev)state.lev=v.lev;if(!HZ[location.hash.slice(1)]&&HZ[v.hz])state.hz=v.hz}}catch(e){}
 const save=()=>{try{localStorage.setItem('maa-ui2',JSON.stringify({ov:state.ov,cap:state.cap,riskPct:state.riskPct,hz:state.hz,slk:state.slk,lev:state.lev}))}catch(e){}};
 const inMkt=s=>state.mkt==='all'||T[s][5].split(' ').includes(state.mkt);
@@ -944,12 +954,12 @@ function renderHz(){
   document.getElementById('hz').innerHTML=HZ_ORDER.map(k=>{const H=HZ[k];const tf={intra:'1–5 min',hour:'1 timme',day:'1 dag',week:'1 vecka'}[H.kind];
     return `<button role="tab" id="tab-${k}" aria-selected="${k===state.hz}" data-hz="${k}"><span class="t">${H.t}</span><span class="s">${H.valid} · ${tf}</span></button>`}).join('');
   const H=HZ[state.hz];
-  const bt=state.view==='backtest',lab=state.view==='lab',jr=state.view==='journal',other=bt||lab||jr;
-  document.getElementById('h1').textContent=jr?'Handelsdagbok':lab?'Strategilabb':(bt?'Backtest · ':'Top picks · ')+H.t;
-  document.getElementById('hsub').textContent=jr?'Dina egna affärer — vilka setups, källor och tider som faktiskt tjänar pengar åt dig.':lab?'Etablerade strategier testade på samma instrument — med kostnader, kontrollperiod och omval som bara ser bakåt.':bt?'Hade rekommendationerna fungerat? Reglerna för entry, stop loss och mål testade på historisk data.':H.sub;
+  const bt=state.view==='backtest',lab=state.view==='lab',jr=state.view==='journal',pfv=state.view==='portfolio',other=bt||lab||jr||pfv;
+  document.getElementById('h1').textContent=pfv?'Virtuell portfölj':jr?'Handelsdagbok':lab?'Strategilabb':(bt?'Backtest · ':'Top picks · ')+H.t;
+  document.getElementById('hsub').textContent=pfv?'1 000 000 kr i virtuella pengar, handlade efter regler på Nasdaq-100, Dow Jones, index och valutor. Målet: slå index över tid.':jr?'Dina egna affärer — vilka setups, källor och tider som faktiskt tjänar pengar åt dig.':lab?'Etablerade strategier testade på samma instrument — med kostnader, kontrollperiod och omval som bara ser bakåt.':bt?'Hade rekommendationerna fungerat? Reglerna för entry, stop loss och mål testade på historisk data.':H.sub;
   document.querySelector('.layout').hidden=other;document.getElementById('bevakning').hidden=other;document.getElementById('metod').hidden=other;
-  document.getElementById('bt').hidden=!bt;document.getElementById('lab').hidden=!lab;document.getElementById('journal').hidden=!jr;
-  document.getElementById('hz').hidden=lab||jr;document.querySelector('.bar2').hidden=lab||jr;
+  document.getElementById('bt').hidden=!bt;document.getElementById('lab').hidden=!lab;document.getElementById('journal').hidden=!jr;document.getElementById('pf').hidden=!pfv;
+  document.getElementById('hz').hidden=lab||jr||pfv;document.querySelector('.bar2').hidden=lab||jr||pfv;
   document.querySelectorAll('.nav a').forEach(a=>{const v=a.dataset.view;if(v&&v===state.view)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
   document.getElementById('regime').innerHTML=H.regime.map(([a,b])=>`<span>${a} <b>${b}</b></span>`).join('');
   const mk=[['all','Alla marknader'],['ndx','Nasdaq'],['spx','S&P 500'],['nord','Norden'],['index','Index'],['ravara','Råvaror'],['fx','Valutor']];
@@ -1474,11 +1484,99 @@ function renderLab(){
   }
 }
 
+// ---------- virtual portfolio (pipeline/portfolio.py)
+let pfChart=null;const PF_OPEN=new Set();let PF_TOUCHED=false;
+const PF_COMP={earnings:'Rapport',momentum:'Momentum',trend:'Trend',quality:'Nyckeltal'};
+const PF_TYPE={rapport:'Efter rapport',momentum:'Momentum',index:'Index',valuta:'Valuta'};
+function pfAvz(p){
+  if(p.kind==='stock'&&!p.cert)return AVZ[p.sym]&&AVZ[p.sym][0]?`${AVZ_BASE}/aktier/om-aktien.html/${AVZ[p.sym][0]}`:`${AVZ_BASE}/sok.html?query=${encodeURIComponent(p.name)}`;
+  const nm=p.avanza_name||(AVZ[p.sym]&&AVZ[p.sym][1])||String(p.name).split(' ')[0].toUpperCase();
+  return `${AVZ_BASE}/borshandlade-produkter/warranter-torg/lista.html?name=${encodeURIComponent(nm)}&warrantTypes=MINI_FUTURE&directions=${p.side>0?'LONG':'SHORT'}&sortField=TOTAL_VALUE_TRADED&sortOrder=DESCENDING`;
+}
+function renderPortfolio(){
+  const out=document.getElementById('pf-out'),P=REAL&&REAL.portfolio;
+  if(pfChart){pfChart.remove();pfChart=null}
+  const kr0=v=>v==null?'–':nf0.format(Math.round(v))+' kr',pc=v=>v==null?'–':sgn(v)+' %',cl=v=>v>0?'pos':v<0?'neg':'';
+  const px=v=>v==null?'–':(Math.abs(v)<10?nf4.format(v):f2(v));
+  const side=s=>s>0?'<span class="dir L">LÅNG</span>':'<span class="dir S">KORT</span>';
+  const veh=p=>p.kind==='stock'&&!p.cert?'Aktien':(p.kind==='stock'?'Mini short':'Mini future')+' ×'+f1(p.lev);
+  if(!P){out.innerHTML='<div class="bt-empty">Portföljen har inte laddats ännu. Den uppdateras varje vardagskväll efter att den amerikanska börsen stängt.</div>';return}
+  const R=P.rules,L=R.limits,S=R.signals;
+  const rulesTxt=`<div class="bt-card" style="margin-top:20px"><h3 class="sec-t"><span>Regler · version ${R.version}</span><span>ändras bara via godkänd PR, gäller framåt</span></h3>
+    <ul class="pf-rules">
+      <li><b>Kapital</b> ${nf0.format(R.start_capital)} kr. Det som inte används i affärer ligger i en indexfond: ${esc(R.benchmark.name)}. Portföljen slår alltså index bara om affärerna gör det.</li>
+      <li><b>Gränser</b>: högst ${L.max_orders_per_day} order per dag (köp, sälj, blankning och återköp räknas var för sig), högst ${f1(L.max_position_pct)} % av portföljen per affär, högst ${L.max_positions} innehav (varav högst ${L.max_index_positions} index och ${L.max_fx_positions} valutor). Hålltid: högst ${L.hold_days} handelsdagar (två veckor).</li>
+      <li><b>Analys</b> varje kväll efter USA-stängning, på data fram till stängningen. Order läggs till nästa öppning. Poäng 0–100 för aktier: rapporteffekt ${Math.round(S.weights_stock.earnings*100)} % (vinstöverraskning och kursreaktion de första ${S.earnings_window[1]} dagarna efter rapporten), momentum ${Math.round(S.weights_stock.momentum*100)} % (3 månader jämfört med övriga aktier), trend ${Math.round(S.weights_stock.trend*100)} % (50- och 200-dagars snitt) och nyckeltal ${Math.round(S.weights_stock.quality*100)} % (analytikerråd, vinst- och försäljningstillväxt, väntad vinst). Index och valutor: momentum ${Math.round(S.weights_cert.momentum*100)} % och trend ${Math.round(S.weights_cert.trend*100)} %.</li>
+      <li><b>Köp</b> vid poäng ≥ ${S.entry_score}, <b>blankning</b> vid ≤ ${100-S.entry_score}. Inte om aktien är överköpt eller översåld (RSI), om rapport väntas inom ${S.no_entry_days_before_earnings} handelsdagar, eller om bolaget är för litet för att ha mini short hos Avanza (börsvärde under ${nf0.format(S.short_min_market_cap_usd/1e9)} miljarder dollar).</li>
+      <li><b>Instrument</b>: aktier köps direkt. Blankning, index och valutor görs med mini futures/certifikat, med en hävstång som gör att positionen svänger ungefär ${f1(R.sizing.target_atr_pct)} % per dag (högst ×${f1(R.sizing.max_leverage)}). Insatsen kan aldrig förloras mer än helt.</li>
+      <li><b>Sälj</b> när stängningskursen passerar stoppen (${f1(R.stops.atr_mult)} × ATR, följer med uppåt), när poängen faller under ${S.exit_score}, eller efter ${L.hold_days} dagar. Stoppen kontrolleras på stängningskurs, inte under dagen, så att brus inte löser ut den.</li>
+      <li><b>Kostnader</b>: aktier ${f2(R.costs.stock_pct_per_order)} % per order (courtage och valutaväxling), certifikat ${f2(R.costs.cert_pct_per_order)} % (spread), finansiering ${f1(R.costs.financing_pct_year)} % per år på certifikatens exponering. Utdelningar räknas för indexfonden men inte för enskilda positioner.</li>
+    </ul></div>`;
+  const B=P.backtest;
+  const btTxt=B?`<div class="bt-card" style="margin-top:20px"><h3 class="sec-t"><span>Samma regler i efterhand (backtest)</span><span>${B.start} – ${B.end} · regler v${B.rules_version}</span></h3>
+    <div class="bt-scroll"><table class="bt-tbl"><thead><tr><th></th><th>Totalt</th><th>Per år</th><th>Svängning</th><th>Största fall</th><th>Sharpe</th></tr></thead><tbody>
+    ${[['Portföljen',B.portfolio],['Index',B.benchmark]].map(([n,x])=>`<tr><td>${n}</td><td class="${cl(x.total_pct)}">${pc(x.total_pct)}</td><td>${pc(x.cagr_pct)}</td><td>${f1(x.vol_pct)} %</td><td class="neg">${pc(x.mdd_pct)}</td><td>${x.sharpe==null?'–':f2(x.sharpe)}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="bt-scroll"><table class="bt-tbl"><thead><tr><th>Typ av affär</th><th>Antal</th><th>Vinstandel</th><th>Snitt per affär</th><th>Resultat</th></tr></thead><tbody>
+    ${Object.entries(B.by_type||{}).map(([k,x])=>`<tr><td>${PF_TYPE[k]||esc(k)}</td><td>${x.n}</td><td>${x.win_pct} %</td><td class="${cl(x.avg_ret_pct)}">${pc(x.avg_ret_pct)}</td><td class="${cl(x.pnl)}">${kr0(x.pnl)}</td></tr>`).join('')}
+    </tbody></table></div>
+    <p class="bt-note" style="padding:0 16px 14px">${B.trades} affärer, ${B.win_pct} % vinnare, i snitt ${pc(B.avg_ret_pct)} per affär efter kostnader (${kr0(B.costs_sek)} totalt). Skillnad mot index: <b class="${cl(B.excess_pct)}">${pc(B.excess_pct)}</b>${B.tracking_t!=null?` (t = ${f2(B.tracking_t)}; över 2 behövs för att skillnaden inte ska kunna vara slump)`:''}. Backtestet utelämnar nyckeltalen (de finns bara som dagens värden) och använder dagens index-bolag, vilket gynnar det i efterhand. Det körs om varje vecka och när reglerna ändras.</p></div>`:'';
+  if(P.status!=='aktiv'){out.innerHTML=`<div class="bt-empty">Portföljen startar efter nästa amerikanska stängning (ca 22:30 svensk tid). Då placeras ${nf0.format(R.start_capital)} kr i indexfonden och de första orderna läggs till nästa dags öppning.</div>${rulesTxt}`;return}
+  const st=P.stats,ret=(P.nav/P.capital0-1)*100,bret=(P.bench/P.capital0-1)*100;
+  const longX=P.positions.filter(p=>p.side>0).reduce((a,p)=>a+p.N*p.lev,0),shortX=P.positions.filter(p=>p.side<0).reduce((a,p)=>a+p.N*p.lev,0);
+  const pend=P.pending||[];
+  const comp=c=>Object.entries(c||{}).map(([k,v])=>`${PF_COMP[k]||k} ${sgn(v,f2)}`).join(' · ');
+  const logDay=(g,first)=>`<details class="pf-day" data-pfday="${g.d}"${PF_OPEN.has(g.d)||(first&&!PF_TOUCHED)?' open':''}><summary><b>${g.d}</b> · portfölj ${kr0(g.nav)} · index ${g.bench_r==null?'–':pc(g.bench_r)} · ${g.fills.length} order genomförda · ${g.decisions.length} lagda till nästa öppning</summary>
+    ${g.fills.length?`<h4>Genomfört på öppningen</h4><ul>${g.fills.map(f=>`<li><b>${esc(f.sym)}</b> ${esc(f.action)} ${px(f.price)}${f.pnl!=null?` · resultat <span class="${cl(f.pnl)}">${kr0(f.pnl)}</span>`:` · ${kr0(f.N)}`} — ${esc(f.why)}</li>`).join('')}</ul>`:''}
+    ${g.decisions.length?`<h4>Beslut efter stängningen</h4><ul>${g.decisions.map(f=>`<li><b>${esc(f.sym)}</b> ${esc(f.action)}${f.N?` ${kr0(f.N)}`:''} — ${esc(f.why)}</li>`).join('')}</ul>`:'<h4>Inga nya order</h4>'}
+    ${(g.skipped||[]).length?`<h4>Ej genomfört</h4><ul>${g.skipped.map(f=>`<li><b>${esc(f.sym)}</b> — ${esc(f.why)}</li>`).join('')}</ul>`:''}
+    <h4>Analys: ${g.n_scored} instrument bedömda, ${g.n_long} över köpgränsen och ${g.n_short} över blankningsgränsen</h4>
+    ${[['Starkast för köp',g.top_long],['Starkast för blankning',g.top_short]].map(([h,a])=>a&&a.length?`<div class="bt-scroll"><table class="bt-tbl pf-cand"><thead><tr><th>${h}</th><th>Poäng</th><th>Delar (−1 till +1)</th><th>Mom. 3 mån</th><th>RSI</th><th>Rapport</th><th>Utfall</th></tr></thead><tbody>
+      ${a.map(c=>`<tr><td><b>${esc(c.sym)}</b></td><td>${Math.round(c.score)}</td><td>${comp(c.comp)}</td><td>${pc(c.mom)}</td><td>${c.rsi==null?'–':Math.round(c.rsi)}</td><td>${c.event?`${c.event.date}: ${sgn(c.event.surprise)} % / ${sgn(c.event.reaction)} %`:'–'}</td><td style="font-family:var(--body);text-align:left">${c.why_not?esc(c.why_not):'<b>Vald</b>'}</td></tr>`).join('')}</tbody></table></div>`:'').join('')}
+  </details>`;
+  out.innerHTML=`
+    <div class="kpis">
+      ${kp('Portföljvärde',kr0(P.nav),`${pc(ret)} sedan start ${P.start}`,cl(ret))}
+      ${kp('Index',pc(bret),'50 % Nasdaq-100 + 50 % Dow Jones i kr',cl(bret))}
+      ${kp('Mot index',sgn(ret-bret,f2)+' %-enh.',ret>=bret?'före index':'efter index',cl(ret-bret))}
+      ${kp('Innehav',`${P.positions.length} / ${L.max_positions}`,`lång ${kr0(longX)} · kort ${kr0(shortX)}`)}
+      ${kp('I indexfonden',kr0(P.sleeve),`${Math.round(P.sleeve/P.nav*100)} % av portföljen`)}
+      ${kp('Affärer',st?st.trades:0,st&&st.trades?`${st.win_pct} % vinnare · snitt ${pc(st.avg_ret_pct)}`:'inga avslutade än')}
+    </div>
+    <div class="bt-card" style="margin-top:20px"><h3 class="sec-t"><span>Portföljen mot index</span><span>senast ${P.last_day} · uppdateras efter USA-stängning</span></h3><div class="eq" id="pf-eq"></div></div>
+    <div class="bt-card" style="margin-top:20px"><h3 class="sec-t"><span>Order till nästa öppning</span><span>${pend.length} av högst ${L.max_orders_per_day}</span></h3>
+      ${pend.length?`<ul class="pf-list">${pend.map(o=>`<li><b>${esc(o.sym)}</b> ${o.action==='close'?'stäng':(o.side>0?'köp':'blanka')}${o.N?` ${kr0(o.N)}`:''} — ${esc(o.why)}</li>`).join('')}</ul>`:'<p class="bt-note" style="padding:0 16px 14px">Inga order: inget instrument nådde gränsen, eller inget innehav ska säljas.</p>'}</div>
+    <div class="bt-card" style="margin-top:20px"><h3 class="sec-t"><span>Innehav</span><span>stängningskurs ${P.last_day}</span></h3>
+      ${P.positions.length?`<div class="bt-scroll"><table class="bt-tbl"><thead><tr><th>Instrument</th><th>Riktning</th><th>Handlas som</th><th>Insats</th><th>Köpt</th><th>Senast</th><th>Resultat</th><th>Stopp</th><th>Dagar</th><th>Varför</th></tr></thead><tbody>
+      ${P.positions.map(p=>`<tr><td><a href="${pfAvz(p)}" target="_blank" rel="noopener"><b>${esc(p.sym)}</b></a> <span class="pf-nm">${esc(p.name)}</span></td><td>${side(p.side)}</td><td style="font-family:var(--body)">${veh(p)}</td><td>${kr0(p.N)}</td><td>${px(p.p0)}<br><span class="pf-nm">${p.d}</span></td><td>${px(p.last)}</td><td class="${cl(p.ret_pct)}">${pc(p.ret_pct)}</td><td>${px(p.stop)}</td><td>${p.held}</td><td class="pf-why">${esc(p.why)}</td></tr>`).join('')}
+      </tbody></table></div>`:'<p class="bt-note" style="padding:0 16px 14px">Inga innehav — allt kapital ligger i indexfonden.</p>'}</div>
+    <div class="bt-card" style="margin-top:20px"><h3 class="sec-t"><span>Analys- och handelslogg</span><span>en post per handelsdag</span></h3>
+      <div class="pf-log">${(P.log||[]).slice(0,30).map((g,k)=>logDay(g,k===0)).join('')||'<p class="bt-note">Inga poster ännu.</p>'}</div></div>
+    <div class="bt-card" style="margin-top:20px"><h3 class="sec-t"><span>Avslutade affärer</span><span>${(P.trades||[]).length} st · resultat efter kostnader</span></h3>
+      ${(P.trades||[]).length?`<div class="bt-scroll"><table class="bt-tbl"><thead><tr><th>Instrument</th><th>Riktning</th><th>Typ</th><th>Öppnad</th><th>Stängd</th><th>Dagar</th><th>Insats</th><th>Resultat</th><th>Varför stängd</th></tr></thead><tbody>
+      ${P.trades.map(t=>`<tr><td><b>${esc(t.sym)}</b></td><td>${side(t.side)}</td><td style="font-family:var(--body)">${PF_TYPE[t.type]||esc(t.type)}</td><td>${t.open_d}<br>${px(t.p0)}</td><td>${t.close_d}<br>${px(t.p1)}</td><td>${t.days}</td><td>${kr0(t.N)}</td><td class="${cl(t.pnl)}">${kr0(t.pnl)}<br>${pc(t.ret_pct)}</td><td class="pf-why">${esc(t.why_out)}</td></tr>`).join('')}
+      </tbody></table></div>`:'<p class="bt-note" style="padding:0 16px 14px">Inga avslutade affärer ännu.</p>'}</div>
+    ${btTxt}${rulesTxt}
+    ${(P.changes||[]).length?`<p class="bt-note">Regeländringar: ${P.changes.map(c=>`${c.d}: v${c.from} → v${c.to}`).join(' · ')}.</p>`:''}
+    <p class="bt-note">Virtuella pengar — inga riktiga order läggs. Order fylls på öppningskursen enligt Yahoo, och verklig spread, courtage och tillgång till mini futures kan skilja sig. Varje vecka går Claude igenom utfallet och föreslår ändringar som en PR.</p>`;
+  const el=document.getElementById('pf-eq'),LW=window.LightweightCharts;
+  if(el&&LW&&P.curve&&P.curve.length){
+    const Cv=n=>cssVar('--'+n);
+    pfChart=LW.createChart(el,{autoSize:true,layout:{background:{type:'solid',color:Cv('surface')},textColor:Cv('muted'),fontFamily:'JetBrains Mono, monospace',fontSize:11,attributionLogo:true},
+      grid:{vertLines:{visible:false},horzLines:{color:Cv('line-2')}},rightPriceScale:{borderColor:Cv('line')},timeScale:{borderColor:Cv('line')},
+      localization:{locale:'sv-SE',priceFormatter:v=>sgn((v-1)*100)+' %'}});
+    pfChart.addSeries(LW.LineSeries,{color:Cv('accent'),lineWidth:2,priceLineVisible:false,title:'Portföljen'}).setData(P.curve.map(p=>({time:p.d,value:p.nav/P.capital0})));
+    pfChart.addSeries(LW.LineSeries,{color:Cv('faint'),lineWidth:2,lineStyle:2,priceLineVisible:false,title:'Index'}).setData(P.curve.map(p=>({time:p.d,value:p.bench/P.capital0})));
+    pfChart.timeScale().fitContent();
+  }
+}
+
 let current=null;
 function render(){
   renderHz();
   if(state.view==='backtest'){renderBacktest();return}
   if(state.view==='lab'){renderLab();return}
+  if(state.view==='portfolio'){renderPortfolio();return}
   if(state.view==='journal'){queueMicrotask(renderJournal);return} // after the journal code below has run
   const {tops,watch}=renderPicks();
   let m=null;
@@ -1496,12 +1594,13 @@ document.addEventListener('click',e=>{
     if(kind==='watch'||window.innerWidth<1100)document.getElementById('detail').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})}
 });
 document.querySelectorAll('.nav a[data-view]').forEach(a=>a.addEventListener('click',e=>{
-  e.preventDefault();state.view=a.dataset.view;try{history.replaceState(null,'','#'+({backtest:'backtest',lab:'strategilabb',journal:'dagbok'}[state.view]||state.hz))}catch(_){}
+  e.preventDefault();state.view=a.dataset.view;try{history.replaceState(null,'','#'+({backtest:'backtest',lab:'strategilabb',journal:'dagbok',portfolio:'portfolj'}[state.view]||state.hz))}catch(_){}
   render();window.scrollTo({top:0,behavior:'auto'});
 }));
 document.getElementById('nav-metod').addEventListener('click',()=>{if(state.view!=='analys'){state.view='analys';render()}});
 ['bt-min','bt-cost'].forEach(id=>document.getElementById(id).addEventListener('change',()=>{if(state.view==='backtest')renderBacktest()}));
 document.getElementById('bt-var').addEventListener('change',e=>{BTUI.variant=e.target.value;renderBacktest()});
+document.getElementById('pf').addEventListener('toggle',e=>{const d=e.target.dataset&&e.target.dataset.pfday;if(!d)return;PF_TOUCHED=true;if(e.target.open)PF_OPEN.add(d);else PF_OPEN.delete(d)},true);
 document.getElementById('lab').addEventListener('click',e=>{const b=e.target.closest('[data-labbars]');if(b){labBars=b.dataset.labbars;renderLab()}});
 document.getElementById('bt').addEventListener('click',e=>{
   const tab=e.target.closest('[data-bttab]');if(tab){BTUI.tab=tab.dataset.bttab;renderBacktest();return}
@@ -1616,7 +1715,7 @@ async function fetchParts(base,auth){
   let dekRaw=null;
   if(auth){dekRaw=await unwrapDek(auth,session);if(!dekRaw)return 'locked'}
   const manifest=await getJSON(base+'manifest.json');
-  const parts=await Promise.all(['intra','hour','daily','log','lab','archive','calib','intralab','journal'].map(async p=>{
+  const parts=await Promise.all(['intra','hour','daily','log','lab','archive','calib','intralab','journal','portfolio'].map(async p=>{
     const hit=partCache[p];if(manifest&&hit&&manifest[p]&&hit.gen===manifest[p])return hit.data;
     let d=null;
     if(auth){const bx=await getJSON(base+p+'.enc.json');if(bx){try{d=JSON.parse(new TextDecoder().decode(await unpack(bx,await openBox(dekRaw,bx))))}catch(e){}}}
@@ -1631,6 +1730,7 @@ async function fetchParts(base,auth){
   const cb=parts[6];if(merged&&cb){merged.calib=cb;merged.parts.calib=cb.generated}
   const il=parts[7];if(merged&&il){merged.intralab=il;merged.parts.intralab=il.generated}
   const jn=parts[8];if(merged&&jn){merged.journal=jn;merged.parts.journal=jn.generated}
+  const pf=parts[9];if(merged&&pf){merged.portfolio=pf;merged.parts.portfolio=pf.generated}
   return merged;
 }
 async function loadData(){

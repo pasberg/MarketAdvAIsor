@@ -1,0 +1,42 @@
+{
+  "_doc": "Regler för den virtuella portföljen (pipeline/portfolio.py). Ändras via PR; varje ändring höjer version och gäller framåt, aldrig retroaktivt.",
+  "version": 1,
+  "start_capital": 1000000,
+  "start_date": "2026-11-24",
+  "limits": {
+    "max_orders_per_day": 5,
+    "max_position_pct": 5.0,
+    "max_positions": 20,
+    "max_fx_positions": 3,
+    "max_index_positions": 3,
+    "hold_days": 10,
+    "min_hold_days": 2
+  },
+  "benchmark": {"name": "50 % Nasdaq-100 + 50 % Dow Jones (indexfond, SEK)", "parts": {"QQQ": 0.5, "DIA": 0.5}},
+  "costs": {
+    "stock_pct_per_order": 0.40,
+    "cert_pct_per_order": 0.20,
+    "financing_pct_year": 3.0
+  },
+  "sizing": {
+    "_doc": "Insats = högst 5 % av portföljen. Aktier köps utan hävstång; insatsen krymps om aktien svänger mer än target_atr_pct per dag. Index, valutor och blankade aktier handlas via certifikat/mini futures med hävstång så att exponeringen svänger ungefär target_atr_pct per dag.",
+    "target_atr_pct": 2.0,
+    "max_leverage": 5.0
+  },
+  "signals": {
+    "weights_stock": {"earnings": 0.40, "momentum": 0.30, "trend": 0.20, "quality": 0.10},
+    "weights_cert": {"momentum": 0.60, "trend": 0.40},
+    "momentum_days": 63,
+    "momentum_skip": 5,
+    "earnings_window": [0, 8],
+    "surprise_full_pct": 10,
+    "reaction_full_pct": 5,
+    "entry_score": 70,
+    "exit_score": 40,
+    "rsi_max_long": 78,
+    "rsi_min_short": 22,
+    "no_entry_days_before_earnings": 10,
+    "short_min_market_cap_usd": 150000000000
+  },
+  "stops": {"atr_mult": 2.5, "trailing": true}
+}

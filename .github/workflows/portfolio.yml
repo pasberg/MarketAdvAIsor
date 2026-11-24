@@ -1,0 +1,59 @@
+name: Portfolio
+
+# The virtual portfolio (pipeline/portfolio.py): after the US close, fill the orders decided the
+# evening before at today's open, mark at the close, decide tomorrow's orders and publish the site.
+# 21:25 UTC is after the close all year (16:00 New York = 20:00 or 21:00 UTC); the later run is a
+# fallback if GitHub delays or skips the first. A run that finds the portfolio up to date does nothing.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "25 21 * * 1-5"
+    - cron: "40 23 * * 1-5"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: live
+  cancel-in-progress: false
+
+jobs:
+  trade:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pipeline/requirements.txt
+      - run: pip install -r pipeline/requirements.txt
+
+      - name: Restore data from earlier runs
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: data-${{ github.run_id }}
+          restore-keys: data-
+
+      - name: Trade the virtual portfolio
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SITE_USERS: ${{ secrets.SITE_USERS }}
+        run: python pipeline/portfolio.py --data data --mode trade
+
+      - name: Publish (with fresh daily bars after the US close)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SITE_USERS: ${{ secrets.SITE_USERS }}
+        run: bash pipeline/publish.sh "intra,daily"
+
+      - name: Save data for later runs
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: data-${{ github.run_id }}

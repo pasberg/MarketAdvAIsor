@@ -108,8 +108,8 @@ def bars_backfill() -> dict[str, dict]:
 class Branch:
     """The archive branch, fetched without file contents; files are read one by one on demand."""
 
-    def __init__(self, url: str, workdir: Path):
-        self.url, self.dir = url, workdir
+    def __init__(self, url: str, workdir: Path, branch: str = BRANCH):
+        self.url, self.dir, self.branch = url, workdir, branch
         workdir.mkdir(parents=True, exist_ok=True)
         self.git("init", "-q")
         self.git("config", "user.name", "github-actions[bot]")
@@ -119,7 +119,7 @@ class Branch:
         self.git("config", "extensions.partialClone", "origin")
         self.git("config", "remote.origin.promisor", "true")
         self.git("config", "remote.origin.partialclonefilter", "blob:none")
-        r = self.git("fetch", "-q", "--filter=blob:none", "--depth=1", "origin", BRANCH, check=False)
+        r = self.git("fetch", "-q", "--filter=blob:none", "--depth=1", "origin", branch, check=False)
         self.head = self.git("rev-parse", "FETCH_HEAD").strip() if r.returncode == 0 else None
         self.changes: dict[str, bytes] = {}
 
@@ -154,7 +154,7 @@ class Branch:
         tree = run("write-tree").stdout.decode().strip()
         parent = ["-p", self.head] if self.head else []
         commit = run("commit-tree", tree, *parent, "-m", message).stdout.decode().strip()
-        run("push", "-q", "origin", f"{commit}:refs/heads/{BRANCH}")
+        run("push", "-q", "origin", f"{commit}:refs/heads/{self.branch}")
         return True
 
 
