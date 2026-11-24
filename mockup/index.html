@@ -1486,8 +1486,11 @@ function renderLab(){
 
 // ---------- virtual portfolio (pipeline/portfolio.py)
 let pfChart=null;const PF_OPEN=new Set();let PF_TOUCHED=false;
-const PF_COMP={earnings:'Rapport',momentum:'Momentum',trend:'Trend',quality:'Nyckeltal'};
-const PF_TYPE={rapport:'Efter rapport',momentum:'Momentum',index:'Index',valuta:'Valuta'};
+const PF_COMP={earnings:'Rapport',momentum:'Momentum',trend:'Trend',quality:'Nyckeltal',growth:'Vinsttillväxt',revisions:'Analytiker',beats:'Rapportträffar',value:'Värdering'};
+const PF_DESC={earnings:'rapportreaktion (vinstöverraskning och kursreaktion de första dagarna efter rapporten)',growth:'vinsttillväxt (vinst per aktie senaste 12 mån mot året innan)',
+  revisions:'analytikerflöde (upp-/nedgraderingar och ändrade riktkurser senaste 45 dagarna)',beats:'rapportträffar (snittöverraskning senaste fyra kvartalen)',
+  value:'värdering (vinst i förhållande till kurs, jämfört med övriga bolag)',momentum:'momentum (3 månader jämfört med övriga aktier)',trend:'trend (50- och 200-dagars snitt)',quality:'nyckeltal'};
+const PF_TYPE={rapport:'Efter rapport',fundamenta:'Fundamenta',momentum:'Momentum',index:'Index',valuta:'Valuta'};
 function pfAvz(p){
   if(p.kind==='stock'&&!p.cert)return AVZ[p.sym]&&AVZ[p.sym][0]?`${AVZ_BASE}/aktier/om-aktien.html/${AVZ[p.sym][0]}`:`${AVZ_BASE}/sok.html?query=${encodeURIComponent(p.name)}`;
   const nm=p.avanza_name||(AVZ[p.sym]&&AVZ[p.sym][1])||String(p.name).split(' ')[0].toUpperCase();
@@ -1506,7 +1509,7 @@ function renderPortfolio(){
     <ul class="pf-rules">
       <li><b>Kapital</b> ${nf0.format(R.start_capital)} kr. Det som inte används i affärer ligger i en indexfond: ${esc(R.benchmark.name)}. Portföljen slår alltså index bara om affärerna gör det.</li>
       <li><b>Gränser</b>: högst ${L.max_orders_per_day} order per dag (köp, sälj, blankning och återköp räknas var för sig), högst ${f1(L.max_position_pct)} % av portföljen per affär, högst ${L.max_positions} innehav (varav högst ${L.max_index_positions} index och ${L.max_fx_positions} valutor). Hålltid: högst ${L.hold_days} handelsdagar (två veckor).</li>
-      <li><b>Analys</b> varje kväll efter USA-stängning, på data fram till stängningen. Order läggs till nästa öppning. Poäng 0–100 för aktier: rapporteffekt ${Math.round(S.weights_stock.earnings*100)} % (vinstöverraskning och kursreaktion de första ${S.earnings_window[1]} dagarna efter rapporten), momentum ${Math.round(S.weights_stock.momentum*100)} % (3 månader jämfört med övriga aktier), trend ${Math.round(S.weights_stock.trend*100)} % (50- och 200-dagars snitt) och nyckeltal ${Math.round(S.weights_stock.quality*100)} % (analytikerråd, vinst- och försäljningstillväxt, väntad vinst). Index och valutor: momentum ${Math.round(S.weights_cert.momentum*100)} % och trend ${Math.round(S.weights_cert.trend*100)} %.</li>
+      <li><b>Analys</b> varje kväll efter USA-stängning, på data fram till stängningen. Order läggs till nästa öppning. Poäng 0–100 för aktier: ${Object.entries(S.weights_stock).map(([k,v])=>`${PF_DESC[k]||k} ${Math.round(v*100)} %`).join(', ')}. Index och valutor: momentum ${Math.round(S.weights_cert.momentum*100)} % och trend ${Math.round(S.weights_cert.trend*100)} %.</li>
       <li><b>Köp</b> vid poäng ≥ ${S.entry_score}, <b>blankning</b> vid ≤ ${100-S.entry_score}. Inte om aktien är överköpt eller översåld (RSI), om rapport väntas inom ${S.no_entry_days_before_earnings} handelsdagar, eller om bolaget är för litet för att ha mini short hos Avanza (börsvärde under ${nf0.format(S.short_min_market_cap_usd/1e9)} miljarder dollar).</li>
       <li><b>Instrument</b>: aktier köps direkt. Blankning, index och valutor görs med mini futures/certifikat, med en hävstång som gör att positionen svänger ungefär ${f1(R.sizing.target_atr_pct)} % per dag (högst ×${f1(R.sizing.max_leverage)}). Insatsen kan aldrig förloras mer än helt.</li>
       <li><b>Sälj</b> när stängningskursen passerar stoppen (${f1(R.stops.atr_mult)} × ATR, följer med uppåt), när poängen faller under ${S.exit_score}, eller efter ${L.hold_days} dagar. Stoppen kontrolleras på stängningskurs, inte under dagen, så att brus inte löser ut den.</li>
