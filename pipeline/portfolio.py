@@ -780,7 +780,9 @@ def export(state: dict | None, cfg: dict, universe: dict, now: datetime) -> dict
             "trades": state["trades"][-300:][::-1], "log": state["log"][-90:][::-1],
             "stats": summarize(state, state["start"], state["last_day"]) if len(nav) > 1 else None,
             "backtest": state.get("backtest"), "rules": cfg, "rules_version": state.get("rules_version"),
-            "changes": state.get("changes", []), "data_errors": state.get("data_errors", {})}
+            "changes": state.get("changes", []), "data_errors": state.get("data_errors", {}),
+            "tuning": {"entry_score": (state.get("tuning") or {}).get("entry_score"),
+                       "history": [{k: v for k, v in h.items() if k != "grid"} | {"grid": h.get("grid")} for h in ((state.get("tuning") or {}).get("history") or [])[-12:][::-1]]}}
 
 
 # ---------------------------------------------------------------- storage
@@ -819,6 +821,69 @@ def save_state(store, users: dict, state: dict, message: str) -> None:
     store.commit_and_push(message)
 
 
+def effective(cfg: dict, state: dict | None) -> dict:
+    """The rules in force: config/portfolio.json plus the automatically tuned entry score (if any)."""
+    t = (state or {}).get("tuning") or {}
+    if t.get("entry_score") is None:
+        return cfg
+    return merged(cfg, {"signals": {"entry_score": t["entry_score"]}})
+
+
+def tune(state: dict, cfg: dict, universe: dict, prices: dict, fund: dict, now: datetime) -> list[str]:
+    """Weekly, mechanical adjustment of the entry score within the bounds the owner approved
+    (config auto_tune.entry_score). Every scored grid point is backtested on two years; the score moves
+    at most one step toward the best point, only when that point beats the current one by min_gain_pp,
+    and a raise is blocked when the live trades it would have excluded did better than the rest."""
+    A = cfg["auto_tune"]["entry_score"]
+    cur = effective(cfg, state)["signals"]["entry_score"]
+    grid, x = [], A["min"]
+    while x <= A["max"] + 1e-9:
+        grid.append(round(x, 1))
+        x += A["step"]
+    res = {}
+    for g in grid:
+        c = merged(cfg, {"signals": {"entry_score": g}})
+        m = Market(prices, universe, fund, c, use_quality=False)
+        end = completed_days(m.days, now)[-1]
+        start_i = next(i for i in range(len(m.days)) if i >= 210 and m.days[i] >= (datetime.strptime(end, "%Y-%m-%d") - timedelta(days=730)).strftime("%Y-%m-%d"))
+        r = run_backtest(m, c, start_i)
+        res[g] = {"excess_pct": r["excess_pct"], "total_pct": r["portfolio"]["total_pct"], "trades": r["trades"],
+                  "avg_ret_pct": r["avg_ret_pct"], "tracking_t": r["tracking_t"]}
+    best = max(grid, key=lambda g: res[g]["excess_pct"])
+    if cur not in res:  # the current value is off the grid (bounds changed): start from the nearest point
+        cur = min(grid, key=lambda g: abs(g - cur))
+    gain = res[best]["excess_pct"] - res[cur]["excess_pct"]
+    new, why = cur, ""
+    fmt = lambda g: f"{g:g} ({res[g]['excess_pct']:+.1f} %-enh. mot index, {res[g]['trades']} affärer)"
+    if best == cur:
+        why = f"Ingen ändring: {fmt(cur)} är bäst i backtestet."
+    elif gain < A["min_gain_pp"]:
+        why = f"Ingen ändring: bästa gränsen {fmt(best)} är bara {gain:.1f} %-enh. bättre än nuvarande {fmt(cur)} (kravet är {A['min_gain_pp']:g})."
+    else:
+        target = round(cur + A["step"] * (1 if best > cur else -1), 1)
+        live = [t for t in state["trades"] if t.get("score_in") is not None]
+        block = None
+        if target > cur and len(live) >= A["min_live_trades"]:
+            cut = [t["ret_pct"] for t in live if t["score_in"] < target]
+            kept = [t["ret_pct"] for t in live if t["score_in"] >= target]
+            if len(cut) >= 5 and kept and sum(cut) / len(cut) > sum(kept) / len(kept):
+                block = (f"de {len(cut)} riktiga affärerna med poäng under {target:g} gick i snitt {sum(cut) / len(cut):+.2f} %, "
+                         f"bättre än övriga ({sum(kept) / len(kept):+.2f} %)")
+        if block:
+            why = f"Ingen ändring: backtestet talar för {fmt(best)}, men {block}."
+        else:
+            new = target
+            why = (f"{'Höjd' if new > cur else 'Sänkt'} från {cur:g} till {new:g}: i backtestet är {fmt(best)} bäst, "
+                   f"{gain:.1f} %-enh. bättre än {fmt(cur)}. Flyttas ett steg i taget.")
+    t = state.setdefault("tuning", {"history": []})
+    t["entry_score"] = new
+    t["history"].append({"d": now.strftime("%Y-%m-%d"), "from": cur, "to": new, "why": why, "grid": res})
+    if new != cur:
+        state.setdefault("changes", []).append({"d": state["last_day"], "from": state.get("rules_version"), "to": state.get("rules_version"),
+                                                "auto": f"köpgräns {cur:g} → {new:g}"})
+    return [why]
+
+
 def trade(state: dict | None, cfg: dict, universe: dict, prices: dict, fund: dict, now: datetime) -> tuple[dict, list[str]]:
     m = Market(prices, universe, fund, cfg)
     days = completed_days(m.days, now)
@@ -850,13 +915,14 @@ def trade(state: dict | None, cfg: dict, universe: dict, prices: dict, fund: dic
         msgs.append(f"{d}: {len(state['log'][-1]['fills'])} order genomförda, {len(state['pending'])} lagda till nästa öppning.")
     bt = state.get("backtest")
     stale = not bt or bt.get("rules_version") != cfg["version"] or bt.get("run") is None or \
+        bt.get("entry_score") != cfg["signals"]["entry_score"] or \
         (now - datetime.fromisoformat(bt["run"])).days >= BACKTEST_MAX_AGE_DAYS
     if stale:
         try:
             mb = Market(prices, universe, fund, cfg, use_quality=False)
             start_i = next(i for i in range(len(mb.days)) if i >= 210 and mb.days[i] >= (datetime.strptime(days[-1], "%Y-%m-%d") - timedelta(days=730)).strftime("%Y-%m-%d"))
             res = run_backtest(mb, cfg, start_i)
-            res.update({"rules_version": cfg["version"], "run": now.isoformat()})
+            res.update({"rules_version": cfg["version"], "run": now.isoformat(), "entry_score": cfg["signals"]["entry_score"]})
             state["backtest"] = res
             msgs.append(f"Backtest {res['start']} – {res['end']}: portfölj {res['portfolio']['total_pct']} %, index {res['benchmark']['total_pct']} %.")
         except Exception as e:
@@ -951,7 +1017,7 @@ def research(cfg, universe, prices, fund, now, se=None) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--data", default="data")
-    ap.add_argument("--mode", choices=["trade", "export", "research"], default="export")
+    ap.add_argument("--mode", choices=["trade", "export", "research", "tune"], default="export")
     a = ap.parse_args()
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from encrypt_data import parse_users
@@ -968,6 +1034,18 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         store = open_store(token, repo, Path(tmp), data / "portfolio_state.json")
         state = load_state(store, users)
+        if a.mode == "tune":
+            if not state:
+                print("Ingen portfölj att justera än.")
+                return 0
+            prices = fetch_prices(universe, list(cfg["benchmark"]["parts"]))
+            fund_file = data / "pf_fund.json"
+            cache = json.loads(fund_file.read_text(encoding="utf-8")) if fund_file.exists() else {}
+            fund = fetch_fundamentals(universe, cache, now)
+            fund_file.write_text(json.dumps(fund), encoding="utf-8")
+            print("\n".join(tune(state, cfg, universe, prices, fund, now)))
+            save_state(store, users, state, f"Portfölj: veckojustering {now:%Y-%m-%d}")
+            cfg = effective(cfg, state)
         if a.mode == "research":
             prices = fetch_prices(universe, list(cfg["benchmark"]["parts"]))
             fund_file = data / "pf_fund.json"
@@ -1005,11 +1083,11 @@ def main() -> int:
                 fund = fetch_fundamentals(universe, cache, now)
                 fund_file.write_text(json.dumps(fund), encoding="utf-8")
                 before = state["last_day"] if state else None
-                state, msgs = trade(state, cfg, universe, prices, fund, now)
+                state, msgs = trade(state, effective(cfg, state), universe, prices, fund, now)
                 print("\n".join(msgs))
                 if state:
                     save_state(store, users, state, f"Portfölj {state['last_day']}" + ("" if state["last_day"] != before else " (backtest)"))
-        out = export(state, cfg, universe, now)
+        out = export(state, effective(cfg, state), universe, now)
     (data / "portfolio.json").write_text(json.dumps(out, separators=(",", ":")), encoding="utf-8")
     print(f"Portfölj: {out['status']}" + (f", {out['last_day']}, NAV {_sv(out['nav'])} kr, {len(out['positions'])} innehav" if state else ""))
     return 0

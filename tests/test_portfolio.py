@@ -158,6 +158,19 @@ class PortfolioEngine(unittest.TestCase):
             pf.step(st, m, i, cfg)
         self.assertTrue(any(t["why_out"].startswith("Mål nått") for t in st["trades"]))
 
+    def test_tune_moves_one_step_with_reason(self):
+        prices, universe, fund, days = market(n=600)
+        now = datetime.strptime(days[-1], "%Y-%m-%d").replace(hour=22, tzinfo=timezone.utc)
+        st = pf.new_state(CFG, days[-1])
+        msgs = pf.tune(st, CFG, universe, prices, fund, now)
+        t = st["tuning"]
+        A = CFG["auto_tune"]["entry_score"]
+        self.assertTrue(A["min"] <= t["entry_score"] <= A["max"])
+        self.assertLessEqual(abs(t["entry_score"] - CFG["signals"]["entry_score"]), A["step"] + 1e-9)
+        self.assertTrue(msgs[0])
+        self.assertEqual(pf.effective(CFG, st)["signals"]["entry_score"], t["entry_score"])
+        self.assertEqual(set(t["history"][-1]["grid"]), {70.0, 72.5, 75.0, 77.5, 80.0})
+
     def test_trade_start_and_resume(self):
         prices, universe, fund, days = market(n=300)
         now = datetime.strptime(days[280], "%Y-%m-%d").replace(hour=22, tzinfo=timezone.utc)

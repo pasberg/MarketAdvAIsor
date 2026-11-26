@@ -9,11 +9,13 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "trade (handla) eller research (jämför regelvarianter i backtest)"
+        description: "trade (handla), research (jämför regelvarianter) eller tune (veckojustering av köpgränsen)"
         default: "trade"
   schedule:
     - cron: "25 21 * * 1-5"
     - cron: "40 23 * * 1-5"
+    # Saturdays: the weekly, rule-bound adjustment of the entry score (mode tune)
+    - cron: "5 6 * * 6"
 
 permissions:
   contents: write
@@ -27,6 +29,8 @@ jobs:
     if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      MODE: ${{ github.event.schedule == '5 6 * * 6' && 'tune' || github.event.inputs.mode || 'trade' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -47,10 +51,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SITE_USERS: ${{ secrets.SITE_USERS }}
-        run: python pipeline/portfolio.py --data data --mode "${{ github.event.inputs.mode || 'trade' }}"
+        run: python pipeline/portfolio.py --data data --mode "$MODE"
 
       - name: Publish (with fresh daily bars after the US close)
-        if: (github.event.inputs.mode || 'trade') == 'trade'
+        if: env.MODE != 'research'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SITE_USERS: ${{ secrets.SITE_USERS }}

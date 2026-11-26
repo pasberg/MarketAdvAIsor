@@ -65,5 +65,15 @@
   "stops": {
     "atr_mult": 2.5,
     "trailing": true
+  },
+  "auto_tune": {
+    "_doc": "Ägaren har godkänt att köpgränsen flyttas automatiskt inom dessa ramar (varje lördag, ett steg i taget, med motivering i loggen).",
+    "entry_score": {
+      "min": 70,
+      "max": 80,
+      "step": 2.5,
+      "min_gain_pp": 2.0,
+      "min_live_trades": 15
+    }
   }
 }

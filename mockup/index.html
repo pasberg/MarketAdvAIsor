@@ -1560,7 +1560,9 @@ function renderPortfolio(){
       ${P.trades.map(t=>`<tr><td><b>${esc(t.sym)}</b></td><td>${side(t.side)}</td><td style="font-family:var(--body)">${PF_TYPE[t.type]||esc(t.type)}</td><td>${t.open_d}<br>${px(t.p0)}</td><td>${t.close_d}<br>${px(t.p1)}</td><td>${t.days}</td><td>${kr0(t.N)}</td><td class="${cl(t.pnl)}">${kr0(t.pnl)}<br>${pc(t.ret_pct)}</td><td class="pf-why">${esc(t.why_out)}</td></tr>`).join('')}
       </tbody></table></div>`:'<p class="bt-note" style="padding:0 16px 14px">Inga avslutade affärer ännu.</p>'}</div>
     ${btTxt}${rulesTxt}
-    ${(P.changes||[]).length?`<p class="bt-note">Regeländringar: ${P.changes.map(c=>`${c.d}: v${c.from} → v${c.to}${c.cancelled&&c.cancelled.length?` (strukna order: ${c.cancelled.map(esc).join(', ')})`:''}`).join(' · ')}.</p>`:''}
+    ${P.tuning&&P.tuning.history&&P.tuning.history.length?`<div class="bt-card" style="margin-top:20px"><h3 class="sec-t"><span>Automatisk justering av köpgränsen</span><span>varje lördag · ${R.auto_tune.entry_score.min}–${R.auto_tune.entry_score.max}, ett steg (${f1(R.auto_tune.entry_score.step)}) i taget</span></h3>
+      <ul class="pf-list">${P.tuning.history.map(h=>`<li><b>${h.d}</b>: ${h.from===h.to?`kvar på ${f1(h.to)}`:`${f1(h.from)} → <b>${f1(h.to)}</b>`} — ${esc(h.why)}${h.grid?`<br><span class="pf-nm">Backtest mot index: ${Object.entries(h.grid).sort((a,b)=>a[0]-b[0]).map(([g,x])=>`${f1(+g)}: ${sgn(x.excess_pct)} %-enh.`).join(' · ')}</span>`:''}</li>`).join('')}</ul></div>`:''}
+    ${(P.changes||[]).length?`<p class="bt-note">Regeländringar: ${P.changes.map(c=>c.auto?`${c.d}: automatiskt ${esc(c.auto)}`:`${c.d}: v${c.from} → v${c.to}${c.cancelled&&c.cancelled.length?` (strukna order: ${c.cancelled.map(esc).join(', ')})`:''}`).join(' · ')}.</p>`:''}
     <p class="bt-note">Virtuella pengar — inga riktiga order läggs. Order fylls på öppningskursen enligt Yahoo, och verklig spread, courtage och tillgång till mini futures kan skilja sig. Varje vecka går Claude igenom utfallet och föreslår ändringar som en PR.</p>`;
   const el=document.getElementById('pf-eq'),LW=window.LightweightCharts;
   if(el&&LW&&P.curve&&P.curve.length){
