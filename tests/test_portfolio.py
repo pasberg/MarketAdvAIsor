@@ -216,6 +216,7 @@ class PortfolioEngine(unittest.TestCase):
 
     def test_trade_start_and_resume(self):
         prices, universe, fund, days = market(n=300)
+        prices["bars"]["QQQ"] = walk(days, 9, drift=0.002, vol=0.008)  # a rising market: the regime filter allows buys
         now = datetime.strptime(days[280], "%Y-%m-%d").replace(hour=22, tzinfo=timezone.utc)
         cut = {"bars": {s: {d: v for d, v in b.items() if d <= days[280]} for s, b in prices["bars"].items()}, "errors": {}}
         st, msgs = pf.trade(None, CFG, universe, cut, fund, now)
