@@ -603,7 +603,9 @@ def step(state: dict, m: Market, i: int, cfg: dict, keep_log: bool = True, first
     cands = []
     for s, x in sc.items():
         u = m.universe[s]
-        for side in (1, -1):
+        if u["kind"] != "stock" and lim.get(f"max_{u['kind']}_positions", 1) == 0:
+            continue  # instruments the rules do not trade are not listed as candidates
+        for side in ((1, -1) if sig.get("allow_short", True) else (1,)):
             ss = x["score"] if side > 0 else 100 - x["score"]
             if ss < sig["entry_score"]:
                 continue
