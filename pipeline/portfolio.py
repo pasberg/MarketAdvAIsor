@@ -969,10 +969,8 @@ def trade(state: dict | None, cfg: dict, universe: dict, prices: dict, fund: dic
 
 
 VARIANTS = [
-    ("v5 (nu, med utdelningar)", {}),
-    ("Marknadsfilter: köp bara när Nasdaq-100 > 200-dagars snitt", {"signals": {"regime": "close_200"}}),
-    ("Marknadsfilter: 50- över 200-dagars snitt", {"signals": {"regime": "50_200"}}),
-    ("Värdering jämförd inom branschen", {"signals": {"value_by_sector": True}}),
+    ("v5: utan marknadsfilter", {"signals": {"regime": None}}),
+    ("v6 (nu): köp bara när Nasdaq-100 > 200-dagars snitt", {}),
 ]
 
 

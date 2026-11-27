@@ -1,6 +1,6 @@
 {
   "_doc": "Regler för den virtuella portföljen (pipeline/portfolio.py). Ändras via PR; varje ändring höjer version och gäller framåt, aldrig retroaktivt.",
-  "version": 5,
+  "version": 6,
   "start_capital": 1000000,
   "start_date": "2026-11-24",
   "limits": {
@@ -60,7 +60,9 @@
     "growth_full_pct": 25,
     "revision_days": 45,
     "revision_full": 4,
-    "allow_short": false
+    "allow_short": false,
+    "regime": "close_200",
+    "_doc_regime": "v6: nya köp bara när Nasdaq-100 (QQQ) stänger över sitt 200-dagars snitt. Befintliga innehav sköts som vanligt (stopp, signal, tidsgräns)."
   },
   "stops": {
     "atr_mult": 2.5,
