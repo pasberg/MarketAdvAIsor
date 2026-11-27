@@ -35,7 +35,7 @@ UNIVERSE_FILE = ROOT / "config" / "portfolio_universe.csv"
 NY = ZoneInfo("America/New_York")
 STATE_FILE = "state.enc.json"
 BACKTEST_MAX_AGE_DAYS = 6
-FUND_VERSION = 2  # bump when fetch_fundamentals stores new fields (forces a refetch)
+FUND_VERSION = 3  # bump when fetch_fundamentals stores new fields (forces a refetch)
 CERT_KINDS = {"index", "fx"}
 FA_KEYS = ("earnings", "beats", "growth", "revisions", "value", "quality")
 
@@ -122,6 +122,7 @@ def fetch_fundamentals(universe: dict, cache: dict, now: datetime) -> dict:
             info = t.info or {}
             rec["info"] = {k: _num(info.get(k)) for k in ("marketCap", "recommendationMean", "forwardPE", "trailingPE",
                                                           "earningsGrowth", "revenueGrowth", "profitMargins")}
+            rec["info"]["sector"] = info.get("sector") or None
         except Exception as e:
             if "Rate" in type(e).__name__ or "Too Many" in str(e):
                 print(f"::warning::Yahoo begränsar anropen — nyckeltal för {sym} och resten används från förra hämtningen.")
@@ -173,6 +174,13 @@ class Series:
                     rsi[k] = 100.0 if lo == 0 else 100 - 100 / (1 + g / lo)
         self.atr, self.rsi, self.sma50, self.sma200, self.idx = ([None] * self.n for _ in range(5))
         self.own_c, self.own_h = oc, oh
+        # dividend yield on the ex-date: the adjusted close moves more than the raw close
+        oa = [bars[d][4] if len(bars[d]) > 4 and bars[d][4] else bars[d][3] for d in own]
+        self.own_dy = [0.0] * len(own)
+        for k in range(1, len(own)):
+            if oc[k - 1] and oc[k] and oa[k - 1] and oa[k]:
+                y = (oa[k] / oa[k - 1]) / (oc[k] / oc[k - 1]) - 1
+                self.own_dy[k] = y if 1e-4 < y < 0.2 else 0.0
         pos = {d: k for k, d in enumerate(own)}
         ptr = -1
         for i, d in enumerate(days):
@@ -302,6 +310,14 @@ class Market:
         fa = {s: self.fa_comps(s, i) for s in stocks}
         ey = sorted((s for s in stocks if fa[s].get("ey") is not None), key=lambda s: fa[s]["ey"])
         ey_rank = {s: (k + 0.5) / len(ey) for k, s in enumerate(ey)}
+        if sig.get("value_by_sector"):
+            groups = {}
+            for s_ in ey:
+                groups.setdefault(self.info.get(s_, {}).get("sector"), []).append(s_)
+            for sec, mem in groups.items():
+                if sec and len(mem) >= 4:  # rank within the sector; small or unknown sectors keep the overall rank
+                    for k, s_ in enumerate(mem):  # ey is sorted, so each group is too
+                        ey_rank[s_] = (k + 0.5) / len(mem)
         for s in mom:
             ser, u = self.s[s], self.universe[s]
             c, a, b = ser.c[i], ser.sma50[i], ser.sma200[i]
@@ -368,6 +384,17 @@ class Market:
             out["downs"] = sum(1 for _, v in win if v < 0)
             out["revisions"] = clip(sum(v for _, v in win) / sig["revision_full"])
         return out
+
+    def regime_ok(self, i: int, kind: str) -> bool:
+        """Market regime from the benchmark's first fund (QQQ): new buys only in an up-trend."""
+        q = self.qqq
+        if q.sma200[i] is None:
+            return True
+        if kind == "close_200":
+            return q.c[i] > q.sma200[i]
+        if kind == "50_200":
+            return q.sma50[i] > q.sma200[i]
+        return True
 
     def rr(self, s: str, i: int, side: int) -> dict | None:
         """Reward / risk at the close of day i. Risk: the stop distance (atr_mult x ATR). Reward, by
@@ -489,7 +516,7 @@ def step(state: dict, m: Market, i: int, cfg: dict, keep_log: bool = True, first
             cost = p["N"] * p["lev"] * cost_rate(cfg, p)
             proceeds += val - cost
             state["positions"].remove(p)
-            pnl = val - cost - p["N"] - p["cost_in"] - p["fin"]
+            pnl = val - cost - p["N"] - p["cost_in"] - p["fin"] + p.get("div", 0.0)
             t = {"id": p["id"], "sym": p["sym"], "side": p["side"], "kind": p["kind"], "cert": p["cert"], "lev": p["lev"],
                  "N": round(p["N"]), "open_d": p["d"], "p0": p["p0"], "close_d": d, "p1": px, "days": p["held"],
                  "pnl": round(pnl), "ret_pct": round(pnl / p["N"] * 100, 2), "cost": round(cost + p["cost_in"] + p["fin"]),
@@ -524,6 +551,14 @@ def step(state: dict, m: Market, i: int, cfg: dict, keep_log: bool = True, first
             f = p["N"] * p["lev"] * fin_rate
             p["fin"] += f
             state["sleeve"] -= f
+        ser = m.s[p["sym"]]
+        if p["kind"] == "stock" and p["d"] != d and ser.traded[i] and ser.idx[i] is not None and not first:
+            dy = ser.own_dy[ser.idx[i]]
+            if dy:
+                # a long holder receives the dividend less 15 % US withholding tax; a short position pays it
+                amt = pos_value(p, p.get("last", p["p0"]), m.fx_at(p["sym"], i)) * dy * (cfg["costs"].get("dividend_net", 0.85) if p["side"] > 0 else -1.0)
+                p["div"] = p.get("div", 0.0) + amt
+                state["sleeve"] += amt
         c = m.s[p["sym"]].c[i]
         if m.s[p["sym"]].traded[i]:
             p["held"] += 1
@@ -575,6 +610,8 @@ def step(state: dict, m: Market, i: int, cfg: dict, keep_log: bool = True, first
             why_not = None
             if s in held:
                 why_not = "redan i portföljen"
+            elif side > 0 and sig.get("regime") and not m.regime_ok(i, sig["regime"]):
+                why_not = {"close_200": "Nasdaq-100 under sitt 200-dagars snitt", "50_200": "Nasdaq-100:s 50-dagars snitt under 200-dagars"}.get(sig["regime"], "marknadsfilter")
             elif side > 0 and x["rsi"] is not None and x["rsi"] > sig["rsi_max_long"]:
                 why_not = f"överköpt (RSI {x['rsi']:.0f})"
             elif side < 0 and x["rsi"] is not None and x["rsi"] < sig["rsi_min_short"]:
@@ -932,13 +969,10 @@ def trade(state: dict | None, cfg: dict, universe: dict, prices: dict, fund: dic
 
 
 VARIANTS = [
-    ("v5 (nu)", {}),
-    ("R/R ≥ 2 mot riktkurs", {"signals": {"min_rr": 2, "rr_source": "analyst"}}),
-    ("R/R ≥ 3 mot riktkurs", {"signals": {"min_rr": 3, "rr_source": "analyst"}}),
-    ("R/R ≥ 1 mot årshögsta", {"signals": {"min_rr": 1, "rr_source": "high", "rr_require": False}}),
-    ("Sälj vid 2 R (vinstmål)", {"stops": {"target_r": 2}}),
-    ("Sälj vid 3 R (vinstmål)", {"stops": {"target_r": 3}}),
-    ("R/R ≥ 2 mot riktkurs + sälj vid 2 R", {"signals": {"min_rr": 2, "rr_source": "analyst"}, "stops": {"target_r": 2}}),
+    ("v5 (nu, med utdelningar)", {}),
+    ("Marknadsfilter: köp bara när Nasdaq-100 > 200-dagars snitt", {"signals": {"regime": "close_200"}}),
+    ("Marknadsfilter: 50- över 200-dagars snitt", {"signals": {"regime": "50_200"}}),
+    ("Värdering jämförd inom branschen", {"signals": {"value_by_sector": True}}),
 ]
 
 
@@ -970,6 +1004,65 @@ def merged(cfg: dict, over: dict) -> dict:
             out[k] = merged(out.get(k, {}), v)
         else:
             out[k] = v
+    return out
+
+
+def _ranks(v: list[float]) -> list[float]:
+    order = sorted(range(len(v)), key=lambda k: v[k])
+    r = [0.0] * len(v)
+    k = 0
+    while k < len(order):
+        j = k
+        while j + 1 < len(order) and v[order[j + 1]] == v[order[k]]:
+            j += 1
+        for t in range(k, j + 1):
+            r[order[t]] = (k + j) / 2
+        k = j + 1
+    return r
+
+
+def spearman(a: list[float], b: list[float]) -> float | None:
+    if len(a) < 10:
+        return None
+    ra, rb = _ranks(a), _ranks(b)
+    ma, mb = sum(ra) / len(ra), sum(rb) / len(rb)
+    cov = sum((x - ma) * (y - mb) for x, y in zip(ra, rb))
+    va, vb = sum((x - ma) ** 2 for x in ra), sum((y - mb) ** 2 for y in rb)
+    return cov / math.sqrt(va * vb) if va and vb else None
+
+
+def ic_study(m: Market, start_i: int, horizon: int) -> dict:
+    """How well each score part ranks the stocks' next `horizon`-day return (rank IC, as in Hikyuu's
+    MF_ICIRWeight). Measured every `horizon` days so the periods do not overlap; t = mean / sd x sqrt(n)."""
+    series = {}
+    for i in range(start_i, len(m.days) - horizon, horizon):
+        sc = m.scores(i)
+        rows = []
+        for s, x in sc.items():
+            if m.universe[s]["kind"] != "stock":
+                continue
+            ser = m.s[s]
+            k = ser.idx[i]
+            if k is None or k + horizon >= len(ser.own_c):
+                continue
+            rows.append((x, ser.own_c[k + horizon] / ser.own_c[k] - 1))
+        keys = {"score"} | {k for x, _ in rows for k in x["comp"]}
+        for key in keys:
+            pts = [((x["score"] if key == "score" else x["comp"].get(key)), r) for x, r in rows]
+            pts = [(a, r) for a, r in pts if a is not None]
+            ic = spearman([a for a, _ in pts], [r for _, r in pts])
+            if ic is not None:
+                series.setdefault(key, []).append((m.days[i], ic))
+    out = {}
+    for key, v in series.items():
+        ics = [x for _, x in v]
+        n = len(ics)
+        mu = sum(ics) / n
+        sd = (sum((x - mu) ** 2 for x in ics) / max(n - 1, 1)) ** 0.5
+        h = n // 2
+        out[key] = {"ic": round(mu, 3), "icir": round(mu / sd, 2) if sd else None, "t": round(mu / sd * math.sqrt(n), 2) if sd else None,
+                    "n": n, "pos_pct": round(sum(x > 0 for x in ics) / n * 100), "first_half": round(sum(ics[:h]) / max(h, 1), 3),
+                    "second_half": round(sum(ics[h:]) / max(n - h, 1), 3)}
     return out
 
 
@@ -1011,7 +1104,17 @@ def research(cfg, universe, prices, fund, now, se=None) -> dict:
             except Exception as e:
                 res.append({"name": name, "error": str(e)})
                 print(f"{name}: fel {e}")
-    return {"run": now.isoformat(), "variants": res}
+    ic = None
+    try:
+        m = Market(prices, universe, fund, cfg, use_quality=False)
+        end = completed_days(m.days, now)[-1]
+        start_i = next(i for i in range(len(m.days)) if i >= 210 and m.days[i] >= (datetime.strptime(end, "%Y-%m-%d") - timedelta(days=730)).strftime("%Y-%m-%d"))
+        ic = ic_study(m, start_i, cfg["limits"]["hold_days"])
+        for k, v in sorted(ic.items(), key=lambda kv: -(kv[1]["ic"])):
+            print(f"IC {k}: {v['ic']:+.3f} (ICIR {v['icir']}, t {v['t']}, {v['pos_pct']} % positiva, halvor {v['first_half']:+.3f}/{v['second_half']:+.3f})")
+    except Exception as e:
+        print(f"IC-studien misslyckades: {e}")
+    return {"run": now.isoformat(), "variants": res, "ic": ic, "ic_horizon": cfg["limits"]["hold_days"]}
 
 
 def main() -> int:

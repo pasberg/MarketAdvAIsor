@@ -171,6 +171,49 @@ class PortfolioEngine(unittest.TestCase):
         self.assertEqual(pf.effective(CFG, st)["signals"]["entry_score"], t["entry_score"])
         self.assertEqual(set(t["history"][-1]["grid"]), {70.0, 72.5, 75.0, 77.5, 80.0})
 
+    def test_dividend_is_credited(self):
+        prices, universe, fund, days = market(n=300)
+        bars = prices["bars"]["S05"]
+        ex = days[280]
+        for d in bars:  # a 2 % dividend: adjusted closes before the ex-date are 2 % lower
+            if d < ex:
+                bars[d][4] = bars[d][3] * 0.98
+        m = pf.Market(prices, universe, fund, CFG)
+        k = m.s["S05"].idx[280]
+        self.assertAlmostEqual(m.s["S05"].own_dy[k], 1 / 0.98 - 1, places=6)
+        st = pf.new_state(CFG, days[270])
+        st["positions"].append({"id": 1, "sym": "S05", "kind": "stock", "cert": False, "side": 1, "lev": 1.0, "N": 50000.0,
+                                "p0": m.s["S05"].c[270], "fx0": m.fx_at("S05", 270), "d": days[270], "atr0": 1.0, "stop": 0.0,
+                                "best": 1e9, "held": 1, "cost_in": 0.0, "fin": 0.0, "why": "", "type": "momentum", "score": 80,
+                                "last": m.s["S05"].c[279]})
+        st["last_day"] = days[279]
+        sleeve = st["sleeve"]
+        pf.step(st, m, 280, CFG)
+        p = next((x for x in st["positions"] if x["id"] == 1), None)
+        self.assertIsNotNone(p)
+        self.assertGreater(p["div"], 50000 * 0.0204 * 0.85 * 0.8)
+
+    def test_spearman_and_ic(self):
+        self.assertAlmostEqual(pf.spearman(list(range(20)), [x * x for x in range(20)]), 1.0)
+        self.assertAlmostEqual(pf.spearman(list(range(20)), [-x for x in range(20)]), -1.0)
+        prices, universe, fund, days = market(n=500)
+        ic = pf.ic_study(pf.Market(prices, universe, fund, CFG), 260, 15)
+        self.assertIn("momentum", ic)
+        self.assertTrue(-1 <= ic["score"]["ic"] <= 1)
+
+    def test_regime_filter_blocks_buys_in_a_downtrend(self):
+        prices, universe, fund, days = market(n=400)
+        prices["bars"]["QQQ"] = walk(days, 5, drift=-0.003, vol=0.005)  # a steadily falling market
+        cfg = pf.merged(CFG, {"signals": {"regime": "close_200"}})
+        m = pf.Market(prices, universe, fund, cfg)
+        st = pf.new_state(cfg, days[300])
+        st["nav"] = []
+        pf.step(st, m, 300, cfg, first=True)
+        for i in range(301, 400):
+            pf.step(st, m, i, cfg)
+        self.assertEqual(st["trades"], [])
+        self.assertEqual(st["positions"], [])
+
     def test_trade_start_and_resume(self):
         prices, universe, fund, days = market(n=300)
         now = datetime.strptime(days[280], "%Y-%m-%d").replace(hour=22, tzinfo=timezone.utc)
